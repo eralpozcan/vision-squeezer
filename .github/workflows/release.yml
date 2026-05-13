@@ -19,10 +19,6 @@ jobs:
             target: aarch64-apple-darwin
             binary: vision-squeezer-mcp
             asset: vision-squeezer-mcp-macos-arm64
-          - os: macos-13
-            target: x86_64-apple-darwin
-            binary: vision-squeezer-mcp
-            asset: vision-squeezer-mcp-macos-x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary: vision-squeezer-mcp
@@ -33,7 +29,7 @@ jobs:
             asset: vision-squeezer-mcp-linux-arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -51,7 +47,7 @@ jobs:
         run: cargo build --release --bin vision-squeezer-mcp --target ${{ matrix.target }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ matrix.asset }}
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
@@ -64,10 +60,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.3.0
         with:
           path: artifacts/
 
@@ -89,7 +85,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
