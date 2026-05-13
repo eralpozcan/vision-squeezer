@@ -11,10 +11,8 @@
   "bin": {
     "vision-squeezer": "./bin/vision-squeezer-mcp"
   },
-  "scripts": {
-    "postinstall": "node scripts/postinstall.js"
-  },
-  "os": ["darwin", "linux"],
+  "os": ["darwin"],
+  "cpu": ["arm64"],
   "engines": {
     "node": ">=18"
   }
