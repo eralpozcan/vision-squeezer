@@ -33,7 +33,10 @@ fn main() {
     // Initialize DB
     let _ = vision_squeezer::Persistence::init_db();
 
-    if matches!(args.get(1).map(|s| s.as_str()), Some("stats") | Some("/vision-stats")) {
+    if matches!(
+        args.get(1).map(|s| s.as_str()),
+        Some("stats") | Some("/vision-stats")
+    ) {
         print_stats();
         return;
     }
