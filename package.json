@@ -5,14 +5,25 @@
   "license": "Elastic-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/eralpozcan/vision-squeezer"
+    "url": "git+https://github.com/eralpozcan/vision-squeezer.git"
   },
-  "keywords": ["llm", "vision", "mcp", "image-optimization", "tokens", "model-context-protocol"],
+  "keywords": [
+    "llm",
+    "vision",
+    "mcp",
+    "image-optimization",
+    "tokens",
+    "model-context-protocol"
+  ],
   "bin": {
-    "vision-squeezer": "./bin/vision-squeezer-mcp"
+    "vision-squeezer": "bin/vision-squeezer-mcp"
   },
-  "os": ["darwin"],
-  "cpu": ["arm64"],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
   "engines": {
     "node": ">=18"
   }

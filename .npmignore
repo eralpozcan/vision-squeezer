@@ -1,0 +1,24 @@
+# Source & build
+src/
+target/
+Cargo.toml
+Cargo.lock
+Makefile
+
+# Dev assets & test data
+assets/
+data/
+docs/
+
+# GitHub / CI
+.github/
+scripts/
+
+# Claude / editor
+.claude/
+CLAUDE.md
+
+# Misc
+llms.txt
+llms-full.txt
+.DS_Store
