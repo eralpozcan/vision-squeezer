@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionSqueezer | LLM-Native Image Optimization</title>
+    <meta name="description" content="Reduce vision model token consumption by preprocessing images into tile-boundary-aligned, padding-free formats.">
+    <meta name="keywords" content="LLM, AI, Vision tokens, MCP, Claude, GPT-4o, Gemini, Image Optimization, Middleware, Anthropic, OpenAI">
+    <link rel="icon" type="image/png" href="favicon.png">
+    
+    <!-- Open Graph / Social -->
+    <meta property="og:title" content="VisionSqueezer | LLM-Native Image Optimization">
+    <meta property="og:description" content="Stop leaking vision tokens. The ultimate middleware to mathematically optimize your images for Claude, GPT, and Gemini.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="assets/logo.png">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="VisionSqueezer | Stop Leaking Vision Tokens">
+    <meta name="twitter:description" content="Mathematically snap your images to exact LLM internal grid boundaries to slash token usage by up to 90% without losing visual detail.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Schema.org Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "VisionSqueezer",
+      "operatingSystem": "Any",
+      "applicationCategory": "DeveloperApplication",
+      "description": "LLM-native image optimization middleware and MCP server that mathematically snaps images to exact grid boundaries for Claude, GPT, and Gemini to reduce token usage.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "softwareVersion": "0.1.0",
+      "url": "https://github.com/eralpozcan/vision-squeezer"
+    }
+    </script>
+</head>
+<body>
+    <div class="glow-bg"></div>
+    <div class="grid-bg"></div>
+
+    <header>
+        <nav class="navbar">
+            <div class="logo-container">
+                <img src="assets/logo.png" alt="VisionSqueezer Logo" class="nav-logo">
+                <span class="logo-text">VisionSqueezer</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#benchmarks">Benchmarks</a>
+                <a href="https://github.com/eralpozcan/vision-squeezer" class="btn btn-outline" target="_blank">GitHub</a>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="hero-content fade-in">
+                <div class="badge">v0.1.0 Released 🚀</div>
+                <h1 class="hero-title">Stop Leaking <br><span class="text-gradient">Vision Tokens.</span></h1>
+                <p class="hero-subtitle">
+                    The ultimate LLM-native image optimization middleware. It mathematically snaps your images to Claude, GPT, and Gemini's exact internal grid boundaries to slash token usage by up to 90% without losing visual detail.
+                </p>
+                <div class="hero-actions">
+                    <a href="#install" class="btn btn-primary">Get Started</a>
+                    <a href="#benchmarks" class="btn btn-secondary">View Benchmarks</a>
+                </div>
+            </div>
+            <div class="hero-visual glass-panel float-anim">
+                <div class="code-header">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                </div>
+                <pre><code><span class="keyword">cargo</span> run -- data/image.jpg --model gpt4o
+
+<span class="comment">// Squeezer simulating OpenAI's short-side algorithm...</span>
+Input:  4096×3072  (2.2 MB)
+Output: 4095×2048  (1.2 MB)
+
+<span class="string">Tokens Saved: 5,595 (33.3% cheaper)</span></code></pre>
+            </div>
+        </section>
+
+        <section id="features" class="features">
+            <h2 class="section-title">The Math Behind the Magic</h2>
+            <div class="feature-grid">
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon claude-icon">C</div>
+                    <h3>Claude (Area-Based)</h3>
+                    <p>Claude bills strictly by pixel area <code>(W × H / 750)</code>. Every pixel of padding costs you. Squeezer aggressively crops solid borders, shaving thousands of tokens instantly.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon gpt-icon">G</div>
+                    <h3>GPT-4o (Tiling System)</h3>
+                    <p>OpenAI forcefully scales the shortest side to 768px, then tiles it. Squeezer simulates this backwards to snap your image right under the exact 512px tile threshold.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon gemini-icon">✨</div>
+                    <h3>Gemini (Massive Tiles)</h3>
+                    <p>Gemini uses huge 768×768 blocks. A slightly overlapping image costs you double. We snap images securely down to the nearest tile boundary.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon sandbox-icon">🧪</div>
+                    <h3>Think in Code (Sandbox)</h3>
+                    <p>Let your agent execute custom crops, binarization, or filters locally. Extract only the context you need to save up to 99.9% tokens.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon stats-icon">📊</div>
+                    <h3>Persistent Analytics</h3>
+                    <p>Locally tracks every optimization in a SQLite database. View your cumulative USD savings directly from your terminal or AI agent.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon mcp-icon">🔌</div>
+                    <h3>Universal MCP</h3>
+                    <p>Works natively with Claude Code, Cursor, Zed, and VS Code. No complex setup, just plug it into your favorite AI tool.</p>
+                </div>
+            </div>
+
+            <div class="gpt5-note glass-panel hover-lift">
+                <div class="gpt5-content">
+                    <div class="icon gpt5-icon">5</div>
+                    <div>
+                        <h3>Wait, what about GPT-5?</h3>
+                        <p>GPT-5 handles up to <strong>10.24 Megapixels</strong> natively (with a hard cap of 1536 tokens). Because of these massive architectural limits, grid-tiling optimization is rarely needed. However, Squeezer still processes GPT-5 images to strip heavy padding and compress file sizes (from MBs to KBs) for much faster API uploads and drastically reduced latency.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="benchmarks" class="benchmarks">
+            <h2 class="section-title">Interactive <span class="text-gradient">Savings Calculator</span></h2>
+            <div class="benchmark-container glass-panel">
+                
+                <div class="controls-grid">
+                    <div class="control-group">
+                        <label>Select Image Source</label>
+                        <div class="toggle-group" id="image-toggle">
+                            <button class="toggle-btn active" data-val="standard">Standard (4MP)</button>
+                            <button class="toggle-btn" data-val="highres">High-Res (12MP)</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Optimization Target</label>
+                        <div class="toggle-group" id="target-toggle">
+                            <button class="toggle-btn active" data-val="agnostic">Agnostic</button>
+                            <button class="toggle-btn" data-val="gpt4o">GPT-4o</button>
+                            <button class="toggle-btn" data-val="claude">Claude</button>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="bench-divider">
+                
+                <div class="bench-content active">
+                    <p class="bench-desc" id="calc-desc">Optimizing a standard 2400x1670 screenshot. Target: <b>Agnostic</b>.</p>
+                    <div class="stats-grid">
+                        <div class="stat-card" id="card-claude">
+                            <h4>Tokens Saved (Claude)</h4>
+                            <div class="stat-value" id="val-claude">-- <small>(--)</small></div>
+                            <div class="stat-sub" id="sub-claude">--</div>
+                        </div>
+                        <div class="stat-card" id="card-gpt">
+                            <h4>Tokens Saved (GPT-4o)</h4>
+                            <div class="stat-value" id="val-gpt">-- <small>(--)</small></div>
+                            <div class="stat-sub" id="sub-gpt">--</div>
+                        </div>
+                        <div class="stat-card" id="card-file">
+                            <h4>File Size Reduced</h4>
+                            <div class="stat-value" id="val-file">-- <small>Smaller</small></div>
+                            <div class="stat-sub" id="sub-file">--</div>
+                        </div>
+                    </div>
+                    <p class="bench-note" id="calc-note">--</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="install" class="install-section">
+            <h2 class="section-title">Universal MCP Integration</h2>
+            <p style="text-align:center; color: var(--text-secondary); margin-bottom: 2rem;">Select your agent or editor below. Thanks to <code style="color: var(--primary); background: rgba(99, 102, 241, 0.1); padding: 2px 6px; border-radius: 4px;">npx -y</code>, zero global installation is required! Just paste the configuration.</p>
+            
+            <div class="install-selector">
+                <select id="editor-select" onchange="updateInstallCode()">
+                    <option value="claude-code">Claude Code (CLI)</option>
+                    <option value="cursor">Cursor (AI Editor)</option>
+                    <option value="vscode">VS Code Copilot</option>
+                    <option value="windsurf">Windsurf (Codeium)</option>
+                    <option value="jetbrains">JetBrains (IntelliJ, WebStorm)</option>
+                    <option value="zed">Zed Editor</option>
+                    <option value="claude-desktop">Claude Desktop (Mac/Win)</option>
+                    <option value="shell-hook">Shell Integration (Zsh/Bash)</option>
+                </select>
+            </div>
+
+            <div class="install-box glass-panel code-block">
+                <div class="code-header">
+                    <span class="comment" id="install-comment"># Zero-config one-liner for Claude Code</span>
+                    <button class="copy-btn" onclick="copyInstallCode(this)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy
+                    </button>
+                </div>
+                <pre><code id="install-code">claude mcp add vision-squeezer -- npx -y vision-squeezer</code></pre>
+            </div>
+        </section>
+
+        <section id="crawlers" class="crawler-section">
+            <h2 class="section-title">Crawler Integration</h2>
+            <p style="text-align:center; color: var(--text-secondary); margin-bottom: 3rem;">Automate token optimization for high-scale web scraping. Integrate with your favorite crawlers via post-processing or request interception.</p>
+            
+            <div class="crawler-grid">
+                <div class="crawler-card">
+                    <div class="crawler-icon">🔥</div>
+                    <h3>Firecrawl / Crawl4AI</h3>
+                    <p>Post-process screenshots before sending to LLM. Use our CLI bridge to "squeeze" images in your pipeline.</p>
+                    <div class="code-header"><span>Node.js / Python Bridge</span></div>
+                    <pre><code>// Execute CLI as a bridge
+const { execSync } = require('child_process');
+const output = execSync('vision-squeezer screenshot.png --output opt.jpg');
+console.log(output.toString());</code></pre>
+                </div>
+
+                <div class="crawler-card">
+                    <div class="crawler-icon">🎭</div>
+                    <h3>Playwright Interceptor</h3>
+                    <p>Intercept all outgoing image requests during crawl and optimize them on-the-fly using VisionSqueezer.</p>
+                    <div class="code-header"><span>Playwright Script</span></div>
+                    <pre><code>await page.route('**/*.{png,jpg}', async (route) => {
+  const response = await route.fetch();
+  const body = await response.body();
+  const optimized = await squeeze(body);
+  route.fulfill({ body: optimized });
+});</code></pre>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-logo">
+                <img src="assets/logo.png" alt="Logo">
+                <span>VisionSqueezer</span>
+            </div>
+            <p>Built with 🦀 Rust. Elastic License 2.0 (ELv2).</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

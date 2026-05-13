@@ -1,0 +1,46 @@
+# VisionSqueezer: Technical Reference for AI Agents
+
+VisionSqueezer is a middleware designed to bridge the gap between human-centric images and LLM-native vision tokenomics. It ensures that images are pre-processed to trigger the absolute minimum billable tiles across major AI providers.
+
+## Mathematical Foundations (2026 Billing)
+
+### Anthropic Claude (Area-Based)
+Claude bills based on the formula `(Width * Height) / 750`.
+- **Optimization Strategy:** Maximize resolution while minimizing pixel count by stripping all non-essential solid-color padding and snap-down resizing.
+
+### OpenAI GPT-4o / GPT-4.5 (Tiling)
+OpenAI rescales the short side to 768px, then chops into 512px tiles.
+- **Optimization Strategy:** Reverse-calculate the 768px scaling. Snap the long side to a 512px boundary *after* the internal 768px scale factor is applied. This avoids "spill-over" tiles that double the cost for just a few extra pixels.
+
+### Google Gemini (Large Tiles)
+Gemini uses a 768x768 tiling grid.
+- **Optimization Strategy:** Aggressively snap to 768px boundaries. An 800px image costs 1032 tokens (2x1 tiles), but a 768px image costs only 258 tokens (1 tile).
+
+## MCP Server Specification
+The server implements the Model Context Protocol (MCP) and provides tools for automated image optimization.
+
+### Tools:
+1. `optimize_image`: Standard optimization.
+   - `image_base64`: Input image.
+   - `target_model`: `claude`, `gpt4o`, `gpt5`, `gemini`.
+   - `mode`: `standard`, `ocr`, `auto`.
+2. `sandbox_execute`: Think-in-Code paradigm.
+   - `operations`: Array of `ImageOp`.
+   - Operations: `crop`, `grayscale`, `binarize`, `resize`, `contrast`, `brightness`.
+3. `get_savings_stats`: Returns cumulative token/USD savings.
+
+## CLI Technical Reference
+- `vision-squeezer <image> --model <name>`: Model-aware resize.
+- `--ops '<JSON>'`: Execute Sandbox operations.
+- `--output <path>`: Custom output destination.
+- `--max-tiles <N>`: Hard cap on token budget.
+
+## Local Persistence
+Data is stored in `~/.vision-squeezer/stats.db` (SQLite).
+- **Table:** `optimizations`
+- **Fields:** `timestamp`, `model`, `original_tokens`, `optimized_tokens`, `bytes_before`, `bytes_after`, `mode`.
+
+## Best Practices for AI Agents
+- Always use `sandbox_execute` if you only need to see a specific part of a high-resolution image (e.g., a specific error log in a screenshot).
+- Use `get_savings_stats` to report ROI to the human user.
+- Prefer `webp` output format for 30-50% smaller file uploads without quality loss.

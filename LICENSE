@@ -1,0 +1,30 @@
+ELASTIC LICENSE 2.0
+
+This Elastic License 2.0 (the “License”) is a license for certain software (the “Software”) made available by the licensor (“Licensor”). By exercising any of the rights granted by this License, you agree to be bound by its terms.
+
+1. Grant of Rights
+Licensor grants you a non-exclusive, royalty-free, worldwide, non-sublicensable, and non-transferable license to use, copy, distribute, make available, and prepare derivative works of the Software, in each case subject to the limitations in Section 2.
+
+2. Limitations
+You may not:
+  2.1. Provide the Software to third parties as a hosted or managed service, where such service provides users with access to any substantial set of the features or functionality of the Software;
+  2.2. Move, change, disable, or circumvent the license key functionality in the Software, or remove or obscure any functionality in the Software that is protected by the license key; or
+  2.3. Alter, remove, or obscure any licensing, copyright, or other notices of the Licensor in the Software.
+
+3. Patents
+Licensor grants you a non-exclusive, royalty-free, worldwide, non-sublicensable, and non-transferable patent license to make, use, sell, and import the Software, where such license applies only to those patent claims licensable by Licensor that are necessarily infringed by the Software. This patent license does not apply to any modifications or additions you make to the Software. This patent license will terminate automatically if you or your affiliates initiate any patent litigation against Licensor or its affiliates (including a cross-claim or counterclaim in a lawsuit) alleging that the Software infringes any patent.
+
+4. Notices
+You must include a copy of this License and any copyright notices of Licensor with any copy or distribution of the Software.
+
+5. DISCLAIMER
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+6. Termination
+This License will terminate automatically if you fail to comply with any of its terms.
+
+7. Governing Law and Jurisdiction
+This License will be governed by the laws of the State of California, without regard to conflict of law principles. Any litigation relating to this License will be subject to the exclusive jurisdiction of the state and federal courts of the Northern District of California.
+
+8. Definitions
+“Hosted or managed service” means a service that provides users with access to the Software or its features or functionality via a network, such as a software-as-a-service, platform-as-a-service, or similar service.

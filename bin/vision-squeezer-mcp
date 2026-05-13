@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+
+// Thin Node.js wrapper that launches the Rust MCP binary.
+// This enables `npx -y vision-squeezer` and `claude mcp add` workflows.
+
+const { execFileSync, spawn } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+
+const binDir = path.join(__dirname, "..", "bin");
+const binaryName = process.platform === "win32" ? "vision-squeezer-mcp.exe" : "vision-squeezer-mcp";
+const binaryPath = path.join(binDir, binaryName);
+
+// Check for --setup / --help
+if (process.argv.includes("--setup") || process.argv.includes("--help")) {
+  const bin = binaryPath;
+  console.log("# VisionSqueezer MCP Setup");
+  console.log(`# Binary: ${bin}`);
+  console.log();
+  console.log("## Claude Code (one-liner)");
+  console.log();
+  console.log("  claude mcp add vision-squeezer -- npx -y vision-squeezer");
+  console.log();
+  console.log("## Claude Desktop (~/.config/claude/claude_desktop_config.json)");
+  console.log();
+  console.log(JSON.stringify({
+    mcpServers: { "vision-squeezer": { command: "npx", args: ["-y", "vision-squeezer"] } }
+  }, null, 2));
+  console.log();
+  console.log("## Cursor (.cursor/mcp.json)");
+  console.log();
+  console.log(JSON.stringify({
+    servers: { "vision-squeezer": { type: "stdio", command: "npx", args: ["-y", "vision-squeezer"] } }
+  }, null, 2));
+  console.log();
+  console.log("## VS Code (.vscode/mcp.json)");
+  console.log();
+  console.log(JSON.stringify({
+    servers: { "vision-squeezer": { type: "stdio", command: "npx", args: ["-y", "vision-squeezer"] } }
+  }, null, 2));
+  process.exit(0);
+}
+
+// Launch the Rust binary, piping stdio through
+if (!fs.existsSync(binaryPath)) {
+  console.error(`Binary not found at ${binaryPath}`);
+  console.error("Run: cargo build --release && cp target/release/vision-squeezer-mcp bin/");
+  process.exit(1);
+}
+
+const child = spawn(binaryPath, process.argv.slice(2), {
+  stdio: "inherit",
+});
+
+child.on("exit", (code) => process.exit(code ?? 0));

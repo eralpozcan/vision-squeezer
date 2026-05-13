@@ -1,0 +1,21 @@
+{
+  "name": "vision-squeezer",
+  "version": "0.1.0",
+  "description": "LLM-native image optimization MCP server. Reduces vision model token consumption by snapping to tile boundaries.",
+  "license": "Elastic-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eralpozcan/vision-squeezer"
+  },
+  "keywords": ["llm", "vision", "mcp", "image-optimization", "tokens", "model-context-protocol"],
+  "bin": {
+    "vision-squeezer": "./bin/vision-squeezer-mcp"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "os": ["darwin", "linux"],
+  "engines": {
+    "node": ">=18"
+  }
+}

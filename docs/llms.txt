@@ -1,0 +1,20 @@
+# VisionSqueezer
+
+> LLM-native image optimization middleware & MCP server. Reduces vision model token consumption by mathematically snapping images to provider-specific tile boundaries.
+
+## Key Features
+- **Provider-Aware Resizing:** Simulate exact internal grid math for Claude (area-based), GPT-4o (512px tiles), and Gemini (768px tiles).
+- **Padding Stripping:** Aggressive background/solid-color border cropping to minimize wasted pixel area.
+- **Think in Code (Sandbox):** Execute atomic operations (crop, grayscale, binarize, resize) locally before sending to LLM.
+- **Persistent Analytics:** Track token and USD savings in a local SQLite database (`~/.vision-squeezer/stats.db`).
+- **Universal MCP:** One-liner integration for Claude Code, Cursor, Zed, and VS Code via `npx -y vision-squeezer`.
+
+## Core Commands
+- `vision-squeezer <image> [options]`: Optimize a local image.
+- `vision-squeezer stats`: View cumulative savings analytics.
+- `vision-squeezer setup-hook`: Print shell integration (eval) script for Zsh/Bash.
+
+## Detailed Documentation
+- [Full LLM Documentation](llms-full.txt)
+- [Project README](README.md)
+- [Mission Statement](MISSION.md)
