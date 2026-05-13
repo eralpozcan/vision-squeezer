@@ -1,9 +1,7 @@
 [build]
-  publish = "docs"
-  command = "echo 'Static site'"
-
-[build.environment]
-  NPM_FLAGS = "--ignore-platform"
+  base    = "docs"
+  publish = "."
+  command = ""
 
 [[headers]]
   for = "/*"
