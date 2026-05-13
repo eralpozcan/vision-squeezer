@@ -8,7 +8,8 @@ use vision_squeezer::{
 
 fn print_usage() {
     eprintln!("Usage: vision-squeezer <image> [options]");
-    eprintln!("       vision-squeezer stats         (show cumulative savings)");
+    eprintln!("       vision-squeezer stats          (show cumulative savings)");
+    eprintln!("       vision-squeezer /vision-stats  (alias for stats)");
     eprintln!("       vision-squeezer setup-hook    (print shell integration script)");
     eprintln!("\nOptions:");
     eprintln!("  --mode ocr|standard|auto  (default: auto)");
@@ -32,7 +33,7 @@ fn main() {
     // Initialize DB
     let _ = vision_squeezer::Persistence::init_db();
 
-    if args.get(1).map(|s| s.as_str()) == Some("stats") {
+    if matches!(args.get(1).map(|s| s.as_str()), Some("stats") | Some("/vision-stats")) {
         print_stats();
         return;
     }
@@ -231,8 +232,9 @@ squeeze() {{
     fi
 }}
 
-# Example of an automatic hook:
-# alias upload-ai='squeeze $1 | xargs -I {{}} my-upload-tool {{}}'
+# Aliases for quick analytics
+alias vision-stats='vision-squeezer stats'
+alias /vision-stats='vision-squeezer stats'
 "#
     );
 }
