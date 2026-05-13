@@ -69,15 +69,16 @@ jobs:
 
       - name: Rename binaries
         run: |
+          mkdir -p dist
           for dir in artifacts/*/; do
             name=$(basename "$dir")
-            mv "$dir"vision-squeezer-mcp "artifacts/$name"
+            cp "${dir}vision-squeezer-mcp" "dist/${name}"
           done
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/vision-squeezer-mcp-*
+          files: dist/vision-squeezer-mcp-*
           generate_release_notes: true
 
   publish-crates:
