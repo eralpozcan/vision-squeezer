@@ -47,6 +47,14 @@ Input image
   → JPEG/WebP encode           configurable quality & format
 ```
 
+### 🦀 Why Rust?
+
+VisionSqueezer is a performance-critical middleware. We chose Rust for three uncompromising reasons:
+
+- **Invisible Latency:** Image processing should never be the bottleneck. Rust ensures that snapping, cropping, and encoding happen in milliseconds, making the optimization layer truly invisible to the developer's workflow.
+- **Minimal Footprint:** As an MCP server running in the background of your IDE, VisionSqueezer is designed to be ultra-lightweight, consuming near-zero CPU and RAM when idle.
+- **Wasm-Ready:** Rust’s first-class support for WebAssembly allows us to bring the same high-performance optimization to the browser and the Edge (Cloudflare Workers), enabling client-side squeezing before the image even hits the network.
+
 ---
 
 ### Case Study 1: Standard Image (istanbul.jpg)
