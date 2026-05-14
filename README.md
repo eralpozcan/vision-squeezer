@@ -484,23 +484,49 @@ Estimated USD Saved: $2.11
 ────────────────────────────────────────────────────────────
 ```
 
-### Shell Hook Integration
+### Shell Hook & Claude Code Skills
+
+Add to `.zshrc` / `.bashrc`:
 
 ```bash
-# Add to .zshrc / .bashrc
 eval "$(vision-squeezer setup-hook)"
-
-# Then use 'squeeze' alias to optimize and get the output path
-img_path=$(squeeze data/logo.png --model gemini)
 ```
 
-> **Note:** `setup-hook` also installs the `/vision-stats` Claude Code skill automatically (see below).
+This installs two things at once:
 
-### Claude Code Skill: `/vision-stats`
+- **`squeeze` alias** — optimize and capture the output path in one step:
+  ```bash
+  img_path=$(squeeze data/logo.png --model gemini)
+  ```
+- **Claude Code skills** — written to `~/.claude/skills/` automatically on first run
 
-For Claude Code users, VisionSqueezer ships a zero-overhead skill that reads your stats directly from the local SQLite database — no MCP round-trip, no token cost.
+#### Available Skills
 
-**Install via marketplace:**
+| Skill | Trigger | What it does |
+|-------|---------|--------------|
+| `vision-stats` | `/vision-stats` | Show cumulative token & byte savings — reads local stats.db, zero MCP overhead |
+| `vision-doctor` | `/vision-doctor` | Check installed version vs latest npm release, show update command if outdated |
+
+**Example output:**
+
+```
+/vision-stats
+── VisionSqueezer Analytics ────────────────────────────────
+Total Optimizations: 42
+Total Tokens Saved:  842,500
+Total Bytes Saved:   156.40 MB
+Estimated USD Saved: $2.11
+────────────────────────────────────────────────────────────
+
+/vision-doctor
+## VisionSqueezer Doctor
+- [x] Binary found: /usr/local/bin/vision-squeezer
+- [x] Installed version: 0.1.1
+- [x] Latest version (npm): 0.1.1
+- [x] Status: Up to date
+```
+
+**Marketplace install** (alternative to `setup-hook`):
 Add to `~/.claude/settings.json`:
 ```json
 {
@@ -511,22 +537,7 @@ Add to `~/.claude/settings.json`:
   }
 }
 ```
-Then run `/plugins add vision-stats@vision-squeezer` in Claude Code.
-
-**Or install automatically** via `setup-hook` (see above) — the skill is written to `~/.claude/skills/vision-stats/` on first run.
-
-**Usage:**
-```
-/vision-stats
-```
-```text
-── VisionSqueezer Analytics ────────────────────────────────
-Total Optimizations: 42
-Total Tokens Saved:  842,500
-Total Bytes Saved:   156.40 MB
-Estimated USD Saved: $2.11
-────────────────────────────────────────────────────────────
-```
+Then run `/plugins add vision-stats@vision-squeezer` or `/plugins add vision-doctor@vision-squeezer` in Claude Code.
 
 ### Sandbox Mode: "Think in Code"
 
