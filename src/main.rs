@@ -291,6 +291,104 @@ SKILL_EOF
 }}
 _vs_install_skill
 unset -f _vs_install_skill
+
+# Install /vision-doctor Claude Code skill (version check + update guidance)
+_vs_install_doctor_skill() {{
+    local skill_dir="$HOME/.claude/skills/vision-doctor"
+    local skill_file="$skill_dir/SKILL.md"
+    if [ ! -f "$skill_file" ]; then
+        mkdir -p "$skill_dir"
+        cat > "$skill_file" << 'SKILL_EOF'
+---
+name: vision-doctor
+description: >
+  Check VisionSqueezer installation health and version status. Detects installed
+  version, compares against latest npm release, and shows update command if outdated.
+  Use when user says "vision-doctor", "check vision-squeezer version", "update vision-squeezer",
+  "is vision-squeezer up to date", "upgrade vision-squeezer", or "/vision-doctor".
+allowed-tools: Bash
+---
+
+# vision-doctor — VisionSqueezer Health Check Skill
+
+Checks binary installation, current version, and latest available version.
+
+## Trigger
+
+`/vision-doctor` or any of: "vision doctor", "check vision-squeezer", "update vision-squeezer",
+"is vision-squeezer up to date", "upgrade vision-squeezer", "vision-squeezer version"
+
+## Action
+
+Run the following shell script and display the formatted checklist result:
+
+```bash
+BIN=$(command -v vision-squeezer 2>/dev/null || echo ~/.cargo/bin/vision-squeezer)
+if [ -x "$BIN" ]; then
+  INSTALLED=$("$BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+else
+  INSTALLED=""
+fi
+LATEST=$(npm view vision-squeezer version 2>/dev/null)
+echo "BIN=$BIN"
+echo "INSTALLED=$INSTALLED"
+echo "LATEST=$LATEST"
+```
+
+## Output format
+
+Display as a markdown checklist based on the values:
+
+```
+## VisionSqueezer Doctor
+
+- [x/] Binary found: <path or "not found">
+- [x/] Installed version: <version or "unknown">
+- [x/] Latest version (npm): <version or "unavailable">
+- [x/] Status: Up to date / Update available / Not installed
+```
+
+Use `[x]` for OK/pass, `[ ]` for missing/fail.
+
+### If update available (`INSTALLED` != `LATEST` and both non-empty):
+
+Show update commands:
+
+```
+## Update available: v<INSTALLED> → v<LATEST>
+
+Via cargo:
+  cargo install vision-squeezer
+
+Via npm global:
+  npm install -g vision-squeezer
+
+Via npx: no action needed — always pulls latest automatically.
+```
+
+### If not installed:
+
+```
+## VisionSqueezer not found
+
+Install via Claude Code (one-liner):
+  claude mcp add vision-squeezer -- npx -y vision-squeezer
+
+Or via cargo:
+  cargo install vision-squeezer
+```
+
+## Notes
+
+- `npx -y vision-squeezer` users are always on latest — no update needed
+- cargo install users must run `cargo install vision-squeezer` to upgrade
+- npm global users run `npm install -g vision-squeezer`
+SKILL_EOF
+        echo "[vision-squeezer] /vision-doctor skill installed → $skill_file"
+    fi
+}}
+_vs_install_doctor_skill
+unset -f _vs_install_doctor_skill
 "#
     );
 }
