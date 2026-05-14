@@ -92,3 +92,29 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
+  publish-npm:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download macOS arm64 binary
+        uses: actions/download-artifact@v4.3.0
+        with:
+          name: vision-squeezer-mcp-macos-arm64
+          path: bin/
+
+      - name: Prepare binary
+        run: chmod +x bin/vision-squeezer-mcp
+
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
