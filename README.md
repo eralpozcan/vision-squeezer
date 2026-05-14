@@ -15,196 +15,6 @@ LLM-native image optimization middleware & MCP server. Reduces vision model toke
 
 Works with **any agent or editor** that speaks MCP — Claude, GPT, Gemini, Codex, or your own.
 
-<details>
-<summary><b>The Math: How Vision Models Bill You in 2026</b></summary>
-
-If you send raw images to an LLM, you are leaking tokens. Modern vision models do not care about your file size (MB/KB); they only care about **pixel dimensions**, but each provider calculates costs completely differently. `vision-squeezer` simulates these algorithms to find the mathematical minimum size that drops your token usage without losing visual context.
-
-### 1. Claude (Area-Based)
-As of 2026 (Claude 3.5 / 4.5+), Anthropic uses an **area-based formula**: `Tokens ≈ (Width × Height) / 750`. 
-Every single pixel of solid background or padding costs you tokens. 
-* **The Fix:** `vision-squeezer` aggressively crops padding (removing solid color borders). A 1025×1025 screenshot shrinks just enough to drop from 1,400 tokens to 1,024 tokens (**%26 savings**).
-
-### 2. GPT-4.5 / GPT-4o (Tiling & Short-side Scaling)
-OpenAI scales your image to fit inside a 2048px box, then rescales it again so the **shortest side is exactly 768px**. Finally, it chops the image into a grid of **512×512 tiles**. Each tile costs 170 tokens. 
-* **The Fix:** If your image's shortest side ends up being 769px, OpenAI will spill over into an entirely new row of 512×512 tiles, doubling your cost. `vision-squeezer` simulates this exact math and snaps the image down by a few pixels so it fits perfectly into the minimum number of tiles.
-
-### 3. Gemini 2.0 / 3.0 (Massive Tiles)
-Gemini uses a massive **768×768 tile** system (if the image is > 384px). Each tile is a flat 258 tokens.
-* **The Fix:** An 800×600 image will trigger a 2×1 tile grid (1,032 tokens). `vision-squeezer` snaps it down slightly to fit exactly inside a 768×768 box, dropping the cost to 258 tokens (**%75 savings**).
-
-</details>
-
-## Pipeline
-
-```
-Input image
-  → crop_padding               remove solid-color borders
-  → calculate_optimal_dims     snap to tile boundary (always down)
-  → [enforce_max_tiles]        optional tile budget cap
-  → resize_exact               Lanczos3
-  → [binarize]                 OCR mode only: Otsu threshold
-  → JPEG/WebP encode           configurable quality & format
-```
-
-### 🦀 Why Rust?
-
-VisionSqueezer is a performance-critical middleware. We chose Rust for three uncompromising reasons:
-
-- **Invisible Latency:** Image processing should never be the bottleneck. Rust ensures that snapping, cropping, and encoding happen in milliseconds, making the optimization layer truly invisible to the developer's workflow.
-- **Minimal Footprint:** As an MCP server running in the background of your IDE, VisionSqueezer is designed to be ultra-lightweight, consuming near-zero CPU and RAM when idle.
-- **Wasm-Ready:** Rust’s first-class support for WebAssembly allows us to bring the same high-performance optimization to the browser and the Edge (Cloudflare Workers), enabling client-side squeezing before the image even hits the network.
-
----
-
-### Case Study 1: Standard Image (istanbul.jpg)
-To demonstrate the impact on standard images, here is the run on a 2400×1670 image (4 MP, 0.5 MB) across the three scenarios:
-
-#### Example 1: Agnostic Optimization (Default)
-When no target model is specified, Squeezer reduces the file size and mathematically optimizes boundaries to be generally efficient across all models.
-
-```bash
-vision-squeezer data/istanbul.jpg
-```
-```text
-Input:  2400×1670  (0.5 MB)
-Output: 2048×1536  (0.3 MB, JPG q75)
-File:   28.6% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude           5344     4194     1150 (21.5%)
-GPT-4o           1105      765      340 (30.8%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           3096     1548     1548 (50.0%)
-────────────────────────────────────────────────────────────
-```
-
-<details>
-<summary><b>View Advanced Model-Targeted Optimizations (GPT-4o & Claude)</b></summary>
-
-### Example 2: Model-Targeted Optimization (GPT-4o)
-If you tell Squeezer the target model, it reverses the model's exact internal calculation (e.g. GPT-4.5's 768px short-side scaling algorithm) and mathematically shrinks the image just enough to fit the absolute minimum tile grid.
-
-```bash
-vision-squeezer data/istanbul.jpg --model gpt4o
-```
-```text
-Input:  2400×1670  (0.5 MB)
-Output: 2399×1200  (0.3 MB, JPG q75)
-File:   33.6% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude           5344     3838     1506 (28.2%)
-GPT-4o           1105     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           3096     2064     1032 (33.3%)
-────────────────────────────────────────────────────────────
-```
-*Notice how targeting `gpt4o` perfectly fits the image into a solid 6-tile boundary (2399x1200) mathematically calculated backwards from OpenAI's short-side scaling algorithm. It maximizes resolution exactly up to the point where an extra tile would be billed.*
-
-### Example 3: Model-Targeted Optimization (Claude)
-Since Claude uses an area-based calculation (`W × H / 750`), Squeezer primarily focuses on aggressively cropping solid-color borders and padding to shrink the pixel area without drastically downscaling the core visual detail.
-
-```bash
-vision-squeezer data/istanbul.jpg --model claude
-```
-```text
-Input:  2400×1670  (0.5 MB)
-Output: 2304×1536  (0.4 MB, JPG q75)
-File:   21.3% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude           5344     4718      626 (11.7%)
-GPT-4o           1105     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           3096     1548     1548 (50.0%)
-────────────────────────────────────────────────────────────
-```
-*Claude benefits tremendously from even minor dimension reductions. By snapping the width and height slightly downwards, we immediately shaved off over 600 tokens while preserving the massive 2304×1536 resolution.*
-
-</details>
-
-### Case Study 2: 12-Megapixel High-Res Image (istanbul2.jpg)
-To demonstrate the impact on massive images, here is the run on a 4096×3072 image (12 MP, 2.2 MB) across the three scenarios:
-
-#### Example 1: Agnostic Optimization
-
-```bash
-vision-squeezer data/istanbul2.jpg
-```
-```text
-Input:  4096×3072  (2.2 MB)
-Output: 3584×2560  (1.3 MB, JPG q75)
-File:   39.6% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude          16777    12233     4544 (27.1%)
-GPT-4o            765     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           6192     5160     1032 (16.7%)
-────────────────────────────────────────────────────────────
-```
-*(Notice the **OpenAI Aspect Ratio Anomaly**: Squeezer removed heavy letterboxing (padding) from this image. By removing the padding, the image became "wider". Because OpenAI's API forces the *new* short side to 768px, the wide aspect ratio pushed the long side into a 3rd tile grid column! This is a fascinating edge case where cropping padding mathematically INCREASES your GPT-4o token cost. If you specifically use `--model gpt4o` on this image, Squeezer will detect this paradox and use a different grid constraint).*
-
-<details>
-<summary><b>View Advanced Model-Targeted Optimizations (GPT-4o & Claude)</b></summary>
-
-#### Example 2: Model-Targeted Optimization (GPT-4o)
-
-```bash
-vision-squeezer data/istanbul2.jpg --model gpt4o
-```
-```text
-Input:  4096×3072  (2.2 MB)
-Output: 4095×2048  (1.2 MB, JPG q75)
-File:   43.2% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude          16777    11182     5595 (33.3%)
-GPT-4o            765     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           6192     4644     1548 (25.0%)
-────────────────────────────────────────────────────────────
-```
-*(By explicitly targeting `gpt4o`, Squeezer optimizes the boundaries such that the new aspect ratio is safely contained. While GPT-4o still bills for the 6-tile layout due to the image's inherent width, Squeezer shrinks the file footprint by 43% without sacrificing high-resolution details.)*
-
-#### Example 3: Model-Targeted Optimization (Claude)
-
-```bash
-vision-squeezer data/istanbul2.jpg --model claude
-```
-```text
-Input:  4096×3072  (2.2 MB)
-Output: 3840×2816  (1.5 MB, JPG q75)
-File:   31.5% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude          16777    14417     2360 (14.1%)
-GPT-4o            765     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           6192     5160     1032 (16.7%)
-────────────────────────────────────────────────────────────
-```
-*(Claude's area-based formula again allows massive token savings simply by trimming to the 3840×2816 boundary, preventing you from paying for over 2,300 tokens of pure padding while retaining 10+ megapixels of fidelity).*
-
-> **💡 FAQ: Wait, why did targeting `gpt4o` save 33% of Claude tokens, but targeting `claude` only saved 14%?**
-> *Because of the **Quality vs. Aggression trade-off**. OpenAI enforces a strict maximum internal resolution (2048px). When you target `gpt4o`, Squeezer must aggressively squash the massive 4096px image down to fit OpenAI's constraints (4095x2048). This massive loss in total pixel area mathematically translates to a huge token drop for Claude.*
-> *However, Claude has **no such maximum limits**. When you explicitly target `claude`, Squeezer knows it doesn't need to destroy your image's resolution. It carefully keeps the massive 3840x2816 size to preserve ultra-fine detail, only trimming the absolute minimum padding to give you the most cost-efficient **lossless** version possible.*
-
-</details>
-
 ---
 
 ## Install
@@ -405,6 +215,213 @@ vision-squeezer path/to/image.jpg \
   --max-tiles 20           # hard cap on tile count
 ```
 
+---
+
+<details>
+<summary><b>The Math: How Vision Models Bill You in 2026</b></summary>
+
+If you send raw images to an LLM, you are leaking tokens. Modern vision models do not care about your file size (MB/KB); they only care about **pixel dimensions**, but each provider calculates costs completely differently. `vision-squeezer` simulates these algorithms to find the mathematical minimum size that drops your token usage without losing visual context.
+
+### 1. Claude (Area-Based)
+As of 2026 (Claude 3.5 / 4.5+), Anthropic uses an **area-based formula**: `Tokens ≈ (Width × Height) / 750`. 
+Every single pixel of solid background or padding costs you tokens. 
+* **The Fix:** `vision-squeezer` aggressively crops padding (removing solid color borders). A 1025×1025 screenshot shrinks just enough to drop from 1,400 tokens to 1,024 tokens (**%26 savings**).
+
+### 2. GPT-4.5 / GPT-4o (Tiling & Short-side Scaling)
+OpenAI scales your image to fit inside a 2048px box, then rescales it again so the **shortest side is exactly 768px**. Finally, it chops the image into a grid of **512×512 tiles**. Each tile costs 170 tokens. 
+* **The Fix:** If your image's shortest side ends up being 769px, OpenAI will spill over into an entirely new row of 512×512 tiles, doubling your cost. `vision-squeezer` simulates this exact math and snaps the image down by a few pixels so it fits perfectly into the minimum number of tiles.
+
+### 3. Gemini 2.0 / 3.0 (Massive Tiles)
+Gemini uses a massive **768×768 tile** system (if the image is > 384px). Each tile is a flat 258 tokens.
+* **The Fix:** An 800×600 image will trigger a 2×1 tile grid (1,032 tokens). `vision-squeezer` snaps it down slightly to fit exactly inside a 768×768 box, dropping the cost to 258 tokens (**%75 savings**).
+
+</details>
+
+## Pipeline
+
+```
+Input image
+  → crop_padding               remove solid-color borders
+  → calculate_optimal_dims     snap to tile boundary (always down)
+  → [enforce_max_tiles]        optional tile budget cap
+  → resize_exact               Lanczos3
+  → [binarize]                 OCR mode only: Otsu threshold
+  → JPEG/WebP encode           configurable quality & format
+```
+
+### 🦀 Why Rust?
+
+VisionSqueezer is a performance-critical middleware. We chose Rust for three uncompromising reasons:
+
+- **Invisible Latency:** Image processing should never be the bottleneck. Rust ensures that snapping, cropping, and encoding happen in milliseconds, making the optimization layer truly invisible to the developer's workflow.
+- **Minimal Footprint:** As an MCP server running in the background of your IDE, VisionSqueezer is designed to be ultra-lightweight, consuming near-zero CPU and RAM when idle.
+- **Wasm-Ready:** Rust's first-class support for WebAssembly allows us to bring the same high-performance optimization to the browser and the Edge (Cloudflare Workers), enabling client-side squeezing before the image even hits the network.
+
+---
+
+### Case Study 1: Standard Image (istanbul.jpg)
+To demonstrate the impact on standard images, here is the run on a 2400×1670 image (4 MP, 0.5 MB) across the three scenarios:
+
+#### Example 1: Agnostic Optimization (Default)
+When no target model is specified, Squeezer reduces the file size and mathematically optimizes boundaries to be generally efficient across all models.
+
+```bash
+vision-squeezer data/istanbul.jpg
+```
+```text
+Input:  2400×1670  (0.5 MB)
+Output: 2048×1536  (0.3 MB, JPG q75)
+File:   28.6% smaller
+
+── Token Estimates ─────────────────────────────────────────
+Model          Before    After      Saved
+------------------------------------------
+Claude           5344     4194     1150 (21.5%)
+GPT-4o           1105      765      340 (30.8%)
+GPT-5            1536     1536        0 (0.0%)
+Gemini           3096     1548     1548 (50.0%)
+────────────────────────────────────────────────────────────
+```
+
+<details>
+<summary><b>View Advanced Model-Targeted Optimizations (GPT-4o & Claude)</b></summary>
+
+### Example 2: Model-Targeted Optimization (GPT-4o)
+If you tell Squeezer the target model, it reverses the model's exact internal calculation (e.g. GPT-4.5's 768px short-side scaling algorithm) and mathematically shrinks the image just enough to fit the absolute minimum tile grid.
+
+```bash
+vision-squeezer data/istanbul.jpg --model gpt4o
+```
+```text
+Input:  2400×1670  (0.5 MB)
+Output: 2399×1200  (0.3 MB, JPG q75)
+File:   33.6% smaller
+
+── Token Estimates ─────────────────────────────────────────
+Model          Before    After      Saved
+------------------------------------------
+Claude           5344     3838     1506 (28.2%)
+GPT-4o           1105     1105        0 (0.0%)
+GPT-5            1536     1536        0 (0.0%)
+Gemini           3096     2064     1032 (33.3%)
+────────────────────────────────────────────────────────────
+```
+*Notice how targeting `gpt4o` perfectly fits the image into a solid 6-tile boundary (2399x1200) mathematically calculated backwards from OpenAI's short-side scaling algorithm. It maximizes resolution exactly up to the point where an extra tile would be billed.*
+
+### Example 3: Model-Targeted Optimization (Claude)
+Since Claude uses an area-based calculation (`W × H / 750`), Squeezer primarily focuses on aggressively cropping solid-color borders and padding to shrink the pixel area without drastically downscaling the core visual detail.
+
+```bash
+vision-squeezer data/istanbul.jpg --model claude
+```
+```text
+Input:  2400×1670  (0.5 MB)
+Output: 2304×1536  (0.4 MB, JPG q75)
+File:   21.3% smaller
+
+── Token Estimates ─────────────────────────────────────────
+Model          Before    After      Saved
+------------------------------------------
+Claude           5344     4718      626 (11.7%)
+GPT-4o           1105     1105        0 (0.0%)
+GPT-5            1536     1536        0 (0.0%)
+Gemini           3096     1548     1548 (50.0%)
+────────────────────────────────────────────────────────────
+```
+*Claude benefits tremendously from even minor dimension reductions. By snapping the width and height slightly downwards, we immediately shaved off over 600 tokens while preserving the massive 2304×1536 resolution.*
+
+</details>
+
+### Case Study 2: 12-Megapixel High-Res Image (istanbul2.jpg)
+To demonstrate the impact on massive images, here is the run on a 4096×3072 image (12 MP, 2.2 MB) across the three scenarios:
+
+#### Example 1: Agnostic Optimization
+
+```bash
+vision-squeezer data/istanbul2.jpg
+```
+```text
+Input:  4096×3072  (2.2 MB)
+Output: 3584×2560  (1.3 MB, JPG q75)
+File:   39.6% smaller
+
+── Token Estimates ─────────────────────────────────────────
+Model          Before    After      Saved
+------------------------------------------
+Claude          16777    12233     4544 (27.1%)
+GPT-4o            765     1105        0 (0.0%)
+GPT-5            1536     1536        0 (0.0%)
+Gemini           6192     5160     1032 (16.7%)
+────────────────────────────────────────────────────────────
+```
+*(Notice the **OpenAI Aspect Ratio Anomaly**: Squeezer removed heavy letterboxing (padding) from this image. By removing the padding, the image became "wider". Because OpenAI's API forces the *new* short side to 768px, the wide aspect ratio pushed the long side into a 3rd tile grid column! This is a fascinating edge case where cropping padding mathematically INCREASES your GPT-4o token cost. If you specifically use `--model gpt4o` on this image, Squeezer will detect this paradox and use a different grid constraint).*
+
+<details>
+<summary><b>View Advanced Model-Targeted Optimizations (GPT-4o & Claude)</b></summary>
+
+#### Example 2: Model-Targeted Optimization (GPT-4o)
+
+```bash
+vision-squeezer data/istanbul2.jpg --model gpt4o
+```
+```text
+Input:  4096×3072  (2.2 MB)
+Output: 4095×2048  (1.2 MB, JPG q75)
+File:   43.2% smaller
+
+── Token Estimates ─────────────────────────────────────────
+Model          Before    After      Saved
+------------------------------------------
+Claude          16777    11182     5595 (33.3%)
+GPT-4o            765     1105        0 (0.0%)
+GPT-5            1536     1536        0 (0.0%)
+Gemini           6192     4644     1548 (25.0%)
+────────────────────────────────────────────────────────────
+```
+*(By explicitly targeting `gpt4o`, Squeezer optimizes the boundaries such that the new aspect ratio is safely contained. While GPT-4o still bills for the 6-tile layout due to the image's inherent width, Squeezer shrinks the file footprint by 43% without sacrificing high-resolution details.)*
+
+#### Example 3: Model-Targeted Optimization (Claude)
+
+```bash
+vision-squeezer data/istanbul2.jpg --model claude
+```
+```text
+Input:  4096×3072  (2.2 MB)
+Output: 3840×2816  (1.5 MB, JPG q75)
+File:   31.5% smaller
+
+── Token Estimates ─────────────────────────────────────────
+Model          Before    After      Saved
+------------------------------------------
+Claude          16777    14417     2360 (14.1%)
+GPT-4o            765     1105        0 (0.0%)
+GPT-5            1536     1536        0 (0.0%)
+Gemini           6192     5160     1032 (16.7%)
+────────────────────────────────────────────────────────────
+```
+*(Claude's area-based formula again allows massive token savings simply by trimming to the 3840×2816 boundary, preventing you from paying for over 2,300 tokens of pure padding while retaining 10+ megapixels of fidelity).*
+
+> **💡 FAQ: Wait, why did targeting `gpt4o` save 33% of Claude tokens, but targeting `claude` only saved 14%?**
+> *Because of the **Quality vs. Aggression trade-off**. OpenAI enforces a strict maximum internal resolution (2048px). When you target `gpt4o`, Squeezer must aggressively squash the massive 4096px image down to fit OpenAI's constraints (4095x2048). This massive loss in total pixel area mathematically translates to a huge token drop for Claude.*
+> *However, Claude has **no such maximum limits**. When you explicitly target `claude`, Squeezer knows it doesn't need to destroy your image's resolution. It carefully keeps the massive 3840x2816 size to preserve ultra-fine detail, only trimming the absolute minimum padding to give you the most cost-efficient **lossless** version possible.*
+
+</details>
+
+---
+
+## Benchmark / Savings
+
+Real-world token consumption before and after `vision-squeezer` (using standard photos and screenshots without `--max-tiles`). Calculations use updated 2026 billing formulas.
+
+| Original Size | Model | Tokens Before | Tokens After | Saved |
+|---------------|-------|---------------|--------------|-------|
+| **1025 × 1025**<br>*(Screenshot)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 1,400<br>425<br>1,032 | 1,024<br>255<br>258 | **26.8%**<br>40.0%<br>75.0% |
+| **4032 × 3024**<br>*(Phone Camera)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 16,257<br>2,125<br>6,192 | 12,232<br>1,745<br>4,128 | **24.8%**<br>17.9%<br>33.3% |
+| **800 × 600**<br>*(Web Image)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 640<br>255<br>1,032 | 341<br>255<br>258 | **46.7%**<br>0.0%<br>75.0% |
+
+*(Note: GPT-5's high limits mean it rarely requires tiling optimization unless the image exceeds 6000px, but `vision-squeezer` will still crop padding and compress the file size dramatically).*
+
+---
 
 ## MCP Tool: `optimize_image`
 
@@ -454,17 +471,8 @@ vision-squeezer path/to/image.jpg \
 | GPT-4o / GPT-4.5 | 512×512 | fit 2048px → scale short 768px | 85 + tiles × 170 |
 | GPT-5/5.5 | 512×512 | fit 6000px / 10.24M px | min(85 + tiles × 170, 1536) |
 | Gemini 2.0/3.0 | 768×768 | > 384x384 → fit 4096px | 258 per tile (flat 258 if small) |
-## Benchmark / Savings
 
-Real-world token consumption before and after `vision-squeezer` (using standard photos and screenshots without `--max-tiles`). Calculations use updated 2026 billing formulas.
-
-| Original Size | Model | Tokens Before | Tokens After | Saved |
-|---------------|-------|---------------|--------------|-------|
-| **1025 × 1025**<br>*(Screenshot)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 1,400<br>425<br>1,032 | 1,024<br>255<br>258 | **26.8%**<br>40.0%<br>75.0% |
-| **4032 × 3024**<br>*(Phone Camera)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 16,257<br>2,125<br>6,192 | 12,232<br>1,745<br>4,128 | **24.8%**<br>17.9%<br>33.3% |
-| **800 × 600**<br>*(Web Image)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 640<br>255<br>1,032 | 341<br>255<br>258 | **46.7%**<br>0.0%<br>75.0% |
-
-*(Note: GPT-5's high limits mean it rarely requires tiling optimization unless the image exceeds 6000px, but `vision-squeezer` will still crop padding and compress the file size dramatically).*
+---
 
 ## Advanced Features
 
@@ -506,6 +514,7 @@ This installs two things at once:
 |-------|---------|--------------|
 | `vision-stats` | `/vision-stats` | Show cumulative token & byte savings — reads local stats.db, zero MCP overhead |
 | `vision-doctor` | `/vision-doctor` | Check installed version vs latest npm release, show update command if outdated |
+| `vision-upgrade` | `/vision-upgrade` | Detect install method (cargo/npm/npx) and run the correct upgrade command |
 
 **Example output:**
 
@@ -521,8 +530,8 @@ Estimated USD Saved: $2.11
 /vision-doctor
 ## VisionSqueezer Doctor
 - [x] Binary found: /usr/local/bin/vision-squeezer
-- [x] Installed version: 0.1.1
-- [x] Latest version (npm): 0.1.1
+- [x] Installed version: 0.1.8
+- [x] Latest version (npm): 0.1.8
 - [x] Status: Up to date
 ```
 
@@ -537,7 +546,7 @@ Add to `~/.claude/settings.json`:
   }
 }
 ```
-Then run `/plugins add vision-stats@vision-squeezer` or `/plugins add vision-doctor@vision-squeezer` in Claude Code.
+Then run `/plugins add vision-stats@vision-squeezer`, `/plugins add vision-doctor@vision-squeezer`, or `/plugins add vision-upgrade@vision-squeezer` in Claude Code.
 
 ### Sandbox Mode: "Think in Code"
 
@@ -576,17 +585,6 @@ await page.route('**/*.{png,jpg}', async (route) => {
 
 PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and guidelines.
 Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## MCP Installation
-```bash
-# Add to Claude Code or Cursor configuration
-claude mcp add vision-squeezer -- npx -y vision-squeezer
-```
-
-## Setup & Compilation
-```bash
-cargo build --release
-```
 
 ## License
 
