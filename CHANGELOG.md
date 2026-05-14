@@ -7,6 +7,17 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.8] - 2026-05-15
+
+### Added
+- **`/vision-upgrade` Claude Code skill**: detects install method (cargo / npm global / npx) and runs the correct upgrade command automatically
+- **`/vision-doctor` improved**: npx users now shown as ✅ instead of "unknown"; links to `/vision-upgrade` when update available; checks MCP registration status
+
+### Fixed
+- **`--version` flag**: binary now responds to `--version`, `-V`, and `version` — outputs `vision-squeezer X.Y.Z`. Previously unhandled, causing `/vision-doctor` to report "unknown" version.
+
+---
+
 ## [0.1.7] - 2026-05-15
 
 ### Added

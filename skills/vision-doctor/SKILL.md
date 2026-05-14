@@ -19,58 +19,55 @@ Checks binary installation, current version, and latest available version.
 
 ## Action
 
-Run the following shell script and display the formatted checklist result:
+Run the following shell script:
 
 ```bash
-# 1. Resolve binary
-BIN=$(command -v vision-squeezer 2>/dev/null \
-  || echo ~/.cargo/bin/vision-squeezer)
-
-# 2. Get installed version
-if [ -x "$BIN" ]; then
+BIN=$(command -v vision-squeezer 2>/dev/null)
+if [ -z "$BIN" ] && [ -x "$HOME/.cargo/bin/vision-squeezer" ]; then
+  BIN="$HOME/.cargo/bin/vision-squeezer"
+fi
+if [ -n "$BIN" ] && [ -x "$BIN" ]; then
   INSTALLED=$("$BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 else
   INSTALLED=""
+  BIN=""
 fi
-
-# 3. Get latest npm version
 LATEST=$(npm view vision-squeezer version 2>/dev/null)
-
-# 4. Emit result
+MCP_CMD=$(claude mcp list 2>/dev/null | grep vision-squeezer | head -1 || echo "")
 echo "BIN=$BIN"
 echo "INSTALLED=$INSTALLED"
 echo "LATEST=$LATEST"
+echo "MCP=$MCP_CMD"
 ```
 
 ## Output format
 
-Display as a markdown checklist based on the values:
+Display as a markdown checklist:
 
 ```
 ## VisionSqueezer Doctor
 
-- [x/] Binary found: <path or "not found">
-- [x/] Installed version: <version or "unknown">
-- [x/] Latest version (npm): <version or "unavailable">
-- [x/] Status: Up to date / Update available / Not installed
+- [x/ ] Binary found: <path or "not found (using npx)">
+- [x/ ] Installed version: <version or "n/a — npx always pulls latest">
+- [x/ ] Latest version (npm): <version>
+- [x/ ] MCP registered: <yes/no>
+- [x/ ] Status: <see below>
 ```
 
-Use `[x]` for OK/pass, `[ ]` for missing/fail.
+### Status logic
 
-### If update available (`INSTALLED` != `LATEST` and both non-empty):
+| Condition | Status |
+|-----------|--------|
+| `INSTALLED` == `LATEST` | ✅ Up to date |
+| `INSTALLED` != `LATEST`, both non-empty | ⚠️ Update available — run `/vision-upgrade` |
+| `BIN` empty, `MCP` contains "npx" | ✅ Using npx — always latest, no action needed |
+| `BIN` empty, no MCP | ❌ Not installed |
 
-Show update commands:
+### If update available:
 
 ```
-## Update available: v<INSTALLED> → v<LATEST>
-
-### Via npx (no action needed — always pulls latest automatically)
-
-### Via cargo:
-cargo install vision-squeezer
-
-### Via npm global:
-npm install -g vision-squeezer
+Update available: v<INSTALLED> → v<LATEST>
+Run /vision-upgrade to update.
 ```
 
 ### If not installed:
@@ -79,14 +76,10 @@ npm install -g vision-squeezer
 ## VisionSqueezer not found
 
 Install via Claude Code (one-liner):
-claude mcp add vision-squeezer -- npx -y vision-squeezer
-
-Or via cargo:
-cargo install vision-squeezer
+  claude mcp add vision-squeezer -- npx -y vision-squeezer
 ```
 
 ## Notes
 
-- `npx -y vision-squeezer` users are always on latest — no update needed
-- cargo install users must run `cargo install vision-squeezer` to upgrade
-- npm global users run `npm install -g vision-squeezer`
+- `npx -y vision-squeezer` users are always on latest — show this as ✅, not an error
+- cargo install users must run `/vision-upgrade` or `cargo install vision-squeezer` to upgrade

@@ -35,6 +35,14 @@ fn main() {
 
     if matches!(
         args.get(1).map(|s| s.as_str()),
+        Some("--version") | Some("-V") | Some("version")
+    ) {
+        println!("vision-squeezer {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
+    if matches!(
+        args.get(1).map(|s| s.as_str()),
         Some("stats") | Some("/vision-stats")
     ) {
         print_stats();
@@ -320,50 +328,55 @@ Checks binary installation, current version, and latest available version.
 
 ## Action
 
-Run the following shell script and display the formatted checklist result:
+Run the following shell script:
 
 ```bash
-BIN=$(command -v vision-squeezer 2>/dev/null || echo ~/.cargo/bin/vision-squeezer)
-if [ -x "$BIN" ]; then
+BIN=$(command -v vision-squeezer 2>/dev/null)
+if [ -z "$BIN" ] && [ -x "$HOME/.cargo/bin/vision-squeezer" ]; then
+  BIN="$HOME/.cargo/bin/vision-squeezer"
+fi
+if [ -n "$BIN" ] && [ -x "$BIN" ]; then
   INSTALLED=$("$BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 else
   INSTALLED=""
+  BIN=""
 fi
 LATEST=$(npm view vision-squeezer version 2>/dev/null)
+MCP_CMD=$(claude mcp list 2>/dev/null | grep vision-squeezer | head -1 || echo "")
 echo "BIN=$BIN"
 echo "INSTALLED=$INSTALLED"
 echo "LATEST=$LATEST"
+echo "MCP=$MCP_CMD"
 ```
 
 ## Output format
 
-Display as a markdown checklist based on the values:
+Display as a markdown checklist:
 
 ```
 ## VisionSqueezer Doctor
 
-- [x/] Binary found: <path or "not found">
-- [x/] Installed version: <version or "unknown">
-- [x/] Latest version (npm): <version or "unavailable">
-- [x/] Status: Up to date / Update available / Not installed
+- [x/ ] Binary found: <path or "not found (using npx)">
+- [x/ ] Installed version: <version or "n/a — npx always pulls latest">
+- [x/ ] Latest version (npm): <version>
+- [x/ ] MCP registered: <yes/no>
+- [x/ ] Status: <see below>
 ```
 
-Use `[x]` for OK/pass, `[ ]` for missing/fail.
+### Status logic
 
-### If update available (`INSTALLED` != `LATEST` and both non-empty):
+| Condition | Status |
+|-----------|--------|
+| `INSTALLED` == `LATEST` | ✅ Up to date |
+| `INSTALLED` != `LATEST`, both non-empty | ⚠️ Update available — run `/vision-upgrade` |
+| `BIN` empty, `MCP` contains "npx" | ✅ Using npx — always latest, no action needed |
+| `BIN` empty, no MCP | ❌ Not installed |
 
-Show update commands:
+### If update available:
 
 ```
-## Update available: v<INSTALLED> → v<LATEST>
-
-Via cargo:
-  cargo install vision-squeezer
-
-Via npm global:
-  npm install -g vision-squeezer
-
-Via npx: no action needed — always pulls latest automatically.
+Update available: v<INSTALLED> → v<LATEST>
+Run /vision-upgrade to update.
 ```
 
 ### If not installed:
@@ -373,22 +386,102 @@ Via npx: no action needed — always pulls latest automatically.
 
 Install via Claude Code (one-liner):
   claude mcp add vision-squeezer -- npx -y vision-squeezer
-
-Or via cargo:
-  cargo install vision-squeezer
 ```
 
 ## Notes
 
-- `npx -y vision-squeezer` users are always on latest — no update needed
-- cargo install users must run `cargo install vision-squeezer` to upgrade
-- npm global users run `npm install -g vision-squeezer`
+- `npx -y vision-squeezer` users are always on latest — show this as ✅, not an error
+- cargo install users must run `/vision-upgrade` or `cargo install vision-squeezer` to upgrade
 SKILL_EOF
         echo "[vision-squeezer] /vision-doctor skill installed → $skill_file"
     fi
 }}
 _vs_install_doctor_skill
 unset -f _vs_install_doctor_skill
+
+# Install /vision-upgrade Claude Code skill (upgrade to latest)
+_vs_install_upgrade_skill() {{
+    local skill_dir="$HOME/.claude/skills/vision-upgrade"
+    local skill_file="$skill_dir/SKILL.md"
+    if [ ! -f "$skill_file" ]; then
+        mkdir -p "$skill_dir"
+        cat > "$skill_file" << 'SKILL_EOF'
+---
+name: vision-upgrade
+description: >
+  Upgrade VisionSqueezer to the latest version. Detects install method (cargo, npm global, npx)
+  and runs the correct update command. Use when user says "vision-upgrade", "upgrade vision-squeezer",
+  "update vision-squeezer", or "/vision-upgrade".
+allowed-tools: Bash
+---
+
+# vision-upgrade — VisionSqueezer Upgrade Skill
+
+Detects install method and upgrades to latest.
+
+## Trigger
+
+`/vision-upgrade` or any of: "vision upgrade", "upgrade vision-squeezer", "update vision-squeezer", "install latest vision-squeezer"
+
+## Action
+
+Run the following detection script first:
+
+```bash
+BIN=$(command -v vision-squeezer 2>/dev/null)
+[ -z "$BIN" ] && [ -x "$HOME/.cargo/bin/vision-squeezer" ] && BIN="$HOME/.cargo/bin/vision-squeezer"
+INSTALLED=""
+[ -n "$BIN" ] && [ -x "$BIN" ] && INSTALLED=$("$BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+LATEST=$(npm view vision-squeezer version 2>/dev/null)
+NPM_GLOBAL=$(npm list -g vision-squeezer --depth=0 2>/dev/null | grep vision-squeezer | head -1)
+echo "BIN=$BIN"
+echo "INSTALLED=$INSTALLED"
+echo "LATEST=$LATEST"
+echo "NPM_GLOBAL=$NPM_GLOBAL"
+```
+
+### Then run the appropriate upgrade command:
+
+**If `NPM_GLOBAL` non-empty** (npm global install):
+```bash
+npm install -g vision-squeezer
+```
+
+**If `BIN` contains `.cargo`** (cargo install):
+```bash
+cargo install vision-squeezer
+```
+
+**If `BIN` empty** (npx user):
+No action needed — npx always pulls latest. Confirm to user.
+
+### After upgrade, verify:
+```bash
+vision-squeezer --version 2>/dev/null || ~/.cargo/bin/vision-squeezer --version 2>/dev/null
+```
+
+## Output format
+
+```
+## VisionSqueezer Upgrade
+
+- [ ] Detected install method: <cargo / npm global / npx>
+- [ ] Version before: v<INSTALLED or "n/a">
+- [ ] Running upgrade...
+- [ ] Version after: v<NEW_VERSION>
+- [ ] Status: ✅ Updated to v<LATEST> / ✅ Already on latest (npx)
+```
+
+## Notes
+
+- npx users: always on latest, no upgrade needed — tell them explicitly
+- If cargo install fails (no Rust): suggest switching to npx with `claude mcp add vision-squeezer -- npx -y vision-squeezer`
+SKILL_EOF
+        echo "[vision-squeezer] /vision-upgrade skill installed → $skill_file"
+    fi
+}}
+_vs_install_upgrade_skill
+unset -f _vs_install_upgrade_skill
 "#
     );
 }

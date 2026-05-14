@@ -13,7 +13,7 @@
       "name": "vision-stats",
       "source": "./",
       "description": "Zero-overhead VisionSqueezer analytics — reads local stats.db directly, no MCP round-trip.",
-      "version": "0.1.7",
+      "version": "0.1.9",
       "author": {
         "name": "Eralp Özcan",
         "url": "https://github.com/eralpozcan"
@@ -28,7 +28,7 @@
       "name": "vision-doctor",
       "source": "./",
       "description": "VisionSqueezer health check — version comparison and update guidance.",
-      "version": "0.1.7",
+      "version": "0.1.9",
       "author": {
         "name": "Eralp Özcan",
         "url": "https://github.com/eralpozcan"
@@ -37,6 +37,21 @@
       "repository": "https://github.com/eralpozcan/vision-squeezer",
       "license": "Elastic-2.0",
       "keywords": ["vision", "tokens", "llm", "optimization", "version"],
+      "category": "productivity"
+    },
+    {
+      "name": "vision-upgrade",
+      "source": "./",
+      "description": "Upgrade VisionSqueezer to latest — detects install method and runs the right command.",
+      "version": "0.1.9",
+      "author": {
+        "name": "Eralp Özcan",
+        "url": "https://github.com/eralpozcan"
+      },
+      "homepage": "https://visionsqueezer.com",
+      "repository": "https://github.com/eralpozcan/vision-squeezer",
+      "license": "Elastic-2.0",
+      "keywords": ["vision", "tokens", "llm", "optimization", "upgrade"],
       "category": "productivity"
     }
   ]
