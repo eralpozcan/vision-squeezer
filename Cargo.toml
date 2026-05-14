@@ -1,6 +1,6 @@
 [package]
 name = "vision-squeezer"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 default-run = "vision-squeezer"
 description = "LLM-native image optimization middleware & MCP server. Reduces vision model token consumption by snapping to tile boundaries."

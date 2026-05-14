@@ -7,6 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.6] - 2026-05-14
+
+### Added
+- **`/vision-doctor` Claude Code skill**: version check — compares installed binary vs latest npm release, shows update command per install method (cargo / npm / npx)
+- **Favicons & PWA manifest** on docs site: full favicon stack (ico, 16×16, 32×32, apple-touch-icon), populated `site.webmanifest` with theme colors
+- **`sitemap.xml` and `robots.txt`** for visionsqueezer.com
+
+### Changed
+- `setup-hook` now also writes `/vision-doctor` skill to `~/.claude/skills/` on first run
+- README: merged separate shell hook + vision-stats sections into unified "Shell Hook & Claude Code Skills" section with skills table
+- OG/Twitter image URLs made absolute; `og:url` added to docs site
+
+---
+
 ## [0.1.5] - 2026-05-14
 
 ### Added
