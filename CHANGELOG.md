@@ -7,6 +7,13 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.7] - 2026-05-15
+
+### Added
+- **Auto-install skills on `npm install`**: `postinstall.js` now writes `/vision-stats` and `/vision-doctor` skills to `~/.claude/skills/` automatically — no `setup-hook` or manual step needed
+
+---
+
 ## [0.1.6] - 2026-05-14
 
 ### Added
