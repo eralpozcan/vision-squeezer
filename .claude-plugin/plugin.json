@@ -1,0 +1,13 @@
+{
+  "name": "vision-squeezer",
+  "description": "LLM-native image optimization tools for Claude Code — analytics and health check skills.",
+  "author": {
+    "name": "Eralp Özcan",
+    "url": "https://github.com/eralpozcan"
+  },
+  "homepage": "https://visionsqueezer.com",
+  "repository": "https://github.com/eralpozcan/vision-squeezer",
+  "version": "0.1.6",
+  "license": "Elastic-2.0",
+  "keywords": ["vision", "tokens", "llm", "optimization", "mcp", "image"]
+}

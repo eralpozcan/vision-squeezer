@@ -19,6 +19,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - README: merged separate shell hook + vision-stats sections into unified "Shell Hook & Claude Code Skills" section with skills table
 - OG/Twitter image URLs made absolute; `og:url` added to docs site
 
+### Infrastructure
+- Added `.claude-plugin/marketplace.json` and `.claude-plugin/plugin.json` — enables `/plugins add vision-stats@vision-squeezer` and `/plugins add vision-doctor@vision-squeezer` via Claude Code marketplace
+
 ---
 
 ## [0.1.5] - 2026-05-14
