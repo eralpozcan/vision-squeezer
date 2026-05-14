@@ -262,7 +262,7 @@ vision-squeezer --version 2>/dev/null || ~/.cargo/bin/vision-squeezer --version 
   for (const [name, content] of Object.entries(skills)) {
     const skillDir = path.join(skillsBase, name);
     const skillFile = path.join(skillDir, 'SKILL.md');
-    if (!fs.existsSync(skillFile)) {
+    if (true) { // always overwrite to keep skills up to date
       fs.mkdirSync(skillDir, { recursive: true });
       fs.writeFileSync(skillFile, content, 'utf8');
       console.log(`[vision-squeezer] /${name} skill installed → ${skillFile}`);
