@@ -14,7 +14,6 @@ function getAssetName() {
   const p = process.platform;
   const a = process.arch;
   if (p === 'darwin' && a === 'arm64') return 'vision-squeezer-mcp-macos-arm64';
-  if (p === 'darwin' && a === 'x64')  return 'vision-squeezer-mcp-macos-x86_64';
   if (p === 'linux'  && a === 'x64')  return 'vision-squeezer-mcp-linux-x86_64';
   if (p === 'linux'  && a === 'arm64') return 'vision-squeezer-mcp-linux-arm64';
   if (p === 'win32'  && a === 'x64')  return 'vision-squeezer-mcp-windows-x86_64.exe';
