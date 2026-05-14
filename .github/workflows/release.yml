@@ -83,11 +83,20 @@ jobs:
             cp "$src" "dist/${name}"
           done
 
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BODY=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/vision-squeezer-mcp-*
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.body }}
 
   publish-crates:
     name: Publish to crates.io
