@@ -20,6 +20,10 @@ jobs:
             target: aarch64-apple-darwin
             binary: vision-squeezer-mcp
             asset: vision-squeezer-mcp-macos-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            binary: vision-squeezer-mcp
+            asset: vision-squeezer-mcp-macos-x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary: vision-squeezer-mcp
@@ -28,6 +32,10 @@ jobs:
             target: aarch64-unknown-linux-gnu
             binary: vision-squeezer-mcp
             asset: vision-squeezer-mcp-linux-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: vision-squeezer-mcp.exe
+            asset: vision-squeezer-mcp-windows-x86_64.exe
 
     steps:
       - uses: actions/checkout@v4.2.2
@@ -52,6 +60,7 @@ jobs:
         with:
           name: ${{ matrix.asset }}
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          if-no-files-found: error
 
   release:
     name: Publish Release
@@ -73,7 +82,9 @@ jobs:
           mkdir -p dist
           for dir in artifacts/*/; do
             name=$(basename "$dir")
-            cp "${dir}vision-squeezer-mcp" "dist/${name}"
+            src="${dir}vision-squeezer-mcp.exe"
+            [ -f "$src" ] || src="${dir}vision-squeezer-mcp"
+            cp "$src" "dist/${name}"
           done
 
       - name: Upload to GitHub Release
@@ -94,7 +105,7 @@ jobs:
 
   publish-npm:
     name: Publish to npm
-    needs: build
+    needs: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.2.2
@@ -103,15 +114,6 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Download macOS arm64 binary
-        uses: actions/download-artifact@v4.3.0
-        with:
-          name: vision-squeezer-mcp-macos-arm64
-          path: bin/
-
-      - name: Prepare binary
-        run: chmod +x bin/vision-squeezer-mcp
 
       - name: Publish
         run: npm publish --access public

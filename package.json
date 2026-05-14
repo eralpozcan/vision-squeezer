@@ -17,14 +17,11 @@
     "model-context-protocol"
   ],
   "bin": {
-    "vision-squeezer": "bin/vision-squeezer-mcp"
+    "vision-squeezer": "bin/run.js"
   },
-  "os": [
-    "darwin"
-  ],
-  "cpu": [
-    "arm64"
-  ],
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  },
   "engines": {
     "node": ">=18"
   }

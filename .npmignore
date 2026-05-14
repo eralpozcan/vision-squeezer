@@ -18,6 +18,13 @@ scripts/
 .claude/
 CLAUDE.md
 
+# Native binaries (downloaded by postinstall, not bundled)
+bin/vision-squeezer-mcp
+bin/vision-squeezer-mcp.exe
+
+# Skills (Claude Code specific)
+skills/
+
 # Misc
 llms.txt
 llms-full.txt
