@@ -22,7 +22,21 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    
+
+    <!-- Umami Analytics (loaded after cookie consent) -->
+    <script>
+      (function() {
+        var consent = localStorage.getItem('vs_cookie_consent');
+        if (consent === 'accepted') {
+          var s = document.createElement('script');
+          s.defer = true;
+          s.src = 'https://cloud.umami.is/script.js';
+          s.setAttribute('data-website-id', '2d1bce07-25fc-40c0-8853-34d064d67101');
+          document.head.appendChild(s);
+        }
+      })();
+    </script>
+
     <!-- Schema.org Structured Data -->
     <script type="application/ld+json">
     {
@@ -37,7 +51,7 @@
         "price": "0",
         "priceCurrency": "USD"
       },
-      "softwareVersion": "0.1.0",
+      "softwareVersion": "0.1.5",
       "url": "https://github.com/eralpozcan/vision-squeezer"
     }
     </script>
@@ -63,7 +77,7 @@
     <main>
         <section class="hero">
             <div class="hero-content fade-in">
-                <div class="badge">v0.1.0 Released 🚀</div>
+                <div class="badge" id="version-badge">v0.1.5 Released 🚀</div>
                 <h1 class="hero-title">Stop Leaking <br><span class="text-gradient">Vision Tokens.</span></h1>
                 <p class="hero-subtitle">
                     The ultimate LLM-native image optimization middleware. It mathematically snaps your images to Claude, GPT, and Gemini's exact internal grid boundaries to slash token usage by up to 90% without losing visual detail.
@@ -197,6 +211,7 @@ Output: 4095×2048  (1.2 MB)
                     <option value="zed">Zed Editor</option>
                     <option value="claude-desktop">Claude Desktop (Mac/Win)</option>
                     <option value="shell-hook">Shell Integration (Zsh/Bash)</option>
+                    <option value="claude-skill">Claude Code Skill (/vision-stats)</option>
                 </select>
             </div>
 
@@ -243,6 +258,17 @@ console.log(output.toString());</code></pre>
         </section>
     </main>
 
+    <!-- Cookie Consent Banner -->
+    <div id="cookie-banner" style="display:none; position:fixed; bottom:0; left:0; right:0; z-index:9999; background:rgba(15,15,25,0.97); border-top:1px solid rgba(99,102,241,0.3); padding:1rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; backdrop-filter:blur(12px);">
+        <p style="margin:0; color:#a0a0b8; font-size:0.875rem; flex:1; min-width:200px;">
+            We use anonymous analytics (<a href="https://umami.is" target="_blank" rel="noopener" style="color:#6366f1;">Umami</a>) to understand how people discover VisionSqueezer. No personal data collected.
+        </p>
+        <div style="display:flex; gap:0.5rem; flex-shrink:0;">
+            <button onclick="vsConsent('declined')" style="padding:0.4rem 1rem; border-radius:6px; border:1px solid rgba(255,255,255,0.15); background:transparent; color:#a0a0b8; font-size:0.8rem; cursor:pointer;">Decline</button>
+            <button onclick="vsConsent('accepted')" style="padding:0.4rem 1rem; border-radius:6px; border:none; background:#6366f1; color:#fff; font-size:0.8rem; cursor:pointer; font-weight:600;">Accept</button>
+        </div>
+    </div>
+
     <footer>
         <div class="footer-content">
             <div class="footer-logo">
@@ -254,5 +280,39 @@ console.log(output.toString());</code></pre>
     </footer>
 
     <script src="script.js"></script>
+    <script>
+      // Dynamic version badge from GitHub releases
+      fetch('https://api.github.com/repos/eralpozcan/vision-squeezer/releases/latest')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d && d.tag_name) {
+            var badge = document.getElementById('version-badge');
+            if (badge) badge.textContent = d.tag_name + ' Released 🚀';
+          }
+        })
+        .catch(function() {});
+
+      // Cookie consent
+      (function() {
+        var banner = document.getElementById('cookie-banner');
+        if (!localStorage.getItem('vs_cookie_consent') && banner) {
+          banner.style.display = 'flex';
+        }
+      })();
+
+      function vsConsent(choice) {
+        localStorage.setItem('vs_cookie_consent', choice);
+        var banner = document.getElementById('cookie-banner');
+        if (banner) banner.style.display = 'none';
+        if (choice === 'accepted') {
+          var s = document.createElement('script');
+          s.defer = true;
+          s.src = 'https://cloud.umami.is/script.js';
+          s.setAttribute('data-website-id', '2d1bce07-25fc-40c0-8853-34d064d67101');
+          document.head.appendChild(s);
+        }
+      }
+
+    </script>
 </body>
 </html>

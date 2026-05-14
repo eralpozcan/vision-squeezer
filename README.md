@@ -494,6 +494,40 @@ eval "$(vision-squeezer setup-hook)"
 img_path=$(squeeze data/logo.png --model gemini)
 ```
 
+> **Note:** `setup-hook` also installs the `/vision-stats` Claude Code skill automatically (see below).
+
+### Claude Code Skill: `/vision-stats`
+
+For Claude Code users, VisionSqueezer ships a zero-overhead skill that reads your stats directly from the local SQLite database — no MCP round-trip, no token cost.
+
+**Install via marketplace:**
+Add to `~/.claude/settings.json`:
+```json
+{
+  "extraKnownMarketplaces": {
+    "vision-squeezer": {
+      "source": { "source": "github", "repo": "eralpozcan/vision-squeezer" }
+    }
+  }
+}
+```
+Then run `/plugins add vision-stats@vision-squeezer` in Claude Code.
+
+**Or install automatically** via `setup-hook` (see above) — the skill is written to `~/.claude/skills/vision-stats/` on first run.
+
+**Usage:**
+```
+/vision-stats
+```
+```text
+── VisionSqueezer Analytics ────────────────────────────────
+Total Optimizations: 42
+Total Tokens Saved:  842,500
+Total Bytes Saved:   156.40 MB
+Estimated USD Saved: $2.11
+────────────────────────────────────────────────────────────
+```
+
 ### Sandbox Mode: "Think in Code"
 
 Execute atomic operations locally before the image ever reaches an LLM. The agent decides _how_ to process the image; you pay zero tokens for the intermediate steps.

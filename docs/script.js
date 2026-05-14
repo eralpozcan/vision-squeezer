@@ -145,6 +145,10 @@ const installData = {
     'shell-hook': {
         comment: "# Add to your .zshrc or .bashrc for the 'squeeze' command",
         code: 'eval "$(npx -y vision-squeezer setup-hook)"'
+    },
+    'claude-skill': {
+        comment: "# Zero-overhead /vision-stats skill for Claude Code",
+        code: '# Option 1: Auto-install via shell hook (recommended)\neval "$(vision-squeezer setup-hook)"\n\n# Option 2: Install via Claude Code marketplace\n# Add to ~/.claude/settings.json > extraKnownMarketplaces:\n# "vision-squeezer": { "source": { "source": "github", "repo": "eralpozcan/vision-squeezer" } }\n# Then in Claude Code:\n/plugins add vision-stats@vision-squeezer'
     }
 };
 

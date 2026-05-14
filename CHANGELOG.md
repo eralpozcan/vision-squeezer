@@ -7,6 +7,44 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.5] - 2026-05-14
+
+### Added
+- **`/vision-stats` Claude Code skill**: zero-overhead analytics via direct CLI call — no MCP round-trip (~150 token saving per stats query)
+- **Marketplace distribution**: skill lives at `skills/vision-stats/SKILL.md`; installable via `/plugins add vision-stats@vision-squeezer` or auto-installed by `setup-hook`
+- **Cookie Consent banner** on docs site (GDPR-friendly, localStorage-based)
+- **Umami analytics** on docs site — loaded only after user consent
+- **Dynamic version badge** on docs site — fetched from GitHub Releases API at page load
+
+### Changed
+- `setup-hook` now writes `/vision-stats` skill to `~/.claude/skills/` on first run (idempotent)
+- Shell hook binary resolution: 4-stage fallback chain (PATH → `~/.cargo/bin` → MCP sibling dir → `find`)
+- Docs install selector: added "Claude Code Skill (/vision-stats)" option
+- README: added `Claude Code Skill` section with marketplace and setup-hook install paths
+
+---
+
+## [0.1.4] - 2026-05-13
+
+### Fixed
+- `package.json` version synced to match `Cargo.toml` (0.1.4)
+
+---
+
+## [0.1.3] - 2026-05-13
+
+### Fixed
+- CI release workflow: fixed binary rename step using `dist/` to avoid same-file `mv` error
+
+---
+
+## [0.1.2] - 2026-05-13
+
+### Fixed
+- CI: opt into Node.js 24 via `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` for GitHub Actions compatibility
+
+---
+
 ## [0.1.1] - 2026-05-13
 
 ### Added
@@ -40,5 +78,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - GPT-4o shows 0% token savings for certain inputs — correct behavior due to 2048px pre-fitting step
 - MCP server communicates via stdin/stdout; do not redirect stdout in shell environments
 
+[0.1.5]: https://github.com/eralpozcan/vision-squeezer/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/eralpozcan/vision-squeezer/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/eralpozcan/vision-squeezer/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/eralpozcan/vision-squeezer/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/eralpozcan/vision-squeezer/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/eralpozcan/vision-squeezer/releases/tag/v0.1.0
