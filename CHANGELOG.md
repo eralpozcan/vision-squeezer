@@ -7,6 +7,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.9] - 2026-05-15
+
+### Fixed
+- **Skills always updated on install**: `postinstall.js` now overwrites existing skill files — previously installed users were stuck on old versions
+
+### Changed
+- **README restructured**: Install section moved to top, CLI Usage follows immediately, case studies and deep-dive sections moved below
+
+---
+
 ## [0.1.8] - 2026-05-15
 
 ### Added
