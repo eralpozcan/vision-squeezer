@@ -2,8 +2,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use image::{DynamicImage, Rgba, RgbaImage};
 use std::hint::black_box;
 use vision_squeezer::{
-    ProcessConfig, ProcessMode, VisionModel, calculate_optimal_dimensions, estimate_tokens,
-    process,
+    ProcessConfig, ProcessMode, VisionModel, calculate_optimal_dimensions, estimate_tokens, process,
 };
 
 fn make_img(w: u32, h: u32) -> DynamicImage {

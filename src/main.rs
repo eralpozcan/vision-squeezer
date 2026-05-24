@@ -23,7 +23,9 @@ fn print_usage() {
     eprintln!("  --model claude|gpt4o|gpt5|gemini  model-aware resizing");
     eprintln!("  --max-tiles N              (limit maximum token tiles)");
     eprintln!("  --output, -o <path>        (custom output path)");
-    eprintln!("  --json                     (machine-readable JSON output, suppresses human table)");
+    eprintln!(
+        "  --json                     (machine-readable JSON output, suppresses human table)"
+    );
     eprintln!("  --dry-run                  (run pipeline, skip disk write, skip stats logging)");
     eprintln!("  --recursive, -r            (batch mode: walk subdirs of input directory)");
     eprintln!("  --output-dir <path>        (batch mode: mirror tree into this directory)");
@@ -339,8 +341,16 @@ fn run_one(path: &Path, opts: &RunOpts) -> Option<FileOutcome> {
             output_bytes as f64 / 1_048_576.0,
             ext.to_uppercase(),
             used_quality,
-            if opts.auto_quality.is_some() { " auto" } else { "" },
-            if opts.dry_run { "  [DRY-RUN — not written]" } else { "" },
+            if opts.auto_quality.is_some() {
+                " auto"
+            } else {
+                ""
+            },
+            if opts.dry_run {
+                "  [DRY-RUN — not written]"
+            } else {
+                ""
+            },
         );
 
         if let Some(pct) = result.report.size_reduction_pct() {

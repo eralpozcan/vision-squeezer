@@ -1098,7 +1098,8 @@ mod tests {
     #[test]
     fn ssim_identical_images_is_one() {
         use image::{DynamicImage, Rgba, RgbaImage};
-        let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([128, 128, 128, 255])));
+        let img =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([128, 128, 128, 255])));
         let s = ssim(&img, &img);
         assert!((s - 1.0).abs() < 1e-9);
     }
@@ -1107,7 +1108,8 @@ mod tests {
     fn ssim_very_different_images_is_low() {
         use image::{DynamicImage, Rgba, RgbaImage};
         let black = DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([0, 0, 0, 255])));
-        let white = DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([255, 255, 255, 255])));
+        let white =
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([255, 255, 255, 255])));
         let s = ssim(&black, &white);
         assert!(s < 0.1, "expected low SSIM, got {s}");
     }

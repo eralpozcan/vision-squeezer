@@ -54,7 +54,12 @@ fn cli_dry_run_does_not_write_file() {
 
     Command::cargo_bin("vision-squeezer")
         .unwrap()
-        .args([input.to_str().unwrap(), "--dry-run", "-o", out.to_str().unwrap()])
+        .args([
+            input.to_str().unwrap(),
+            "--dry-run",
+            "-o",
+            out.to_str().unwrap(),
+        ])
         .assert()
         .success();
 

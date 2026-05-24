@@ -26,11 +26,7 @@ fn mcp_tools_list_includes_optimize_image() {
         .expect("spawn mcp");
 
     let stdin = child.stdin.as_mut().unwrap();
-    writeln!(
-        stdin,
-        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/list"}}"#
-    )
-    .unwrap();
+    writeln!(stdin, r#"{{"jsonrpc":"2.0","id":1,"method":"tools/list"}}"#).unwrap();
     stdin.flush().unwrap();
 
     let stdout = child.stdout.take().unwrap();
@@ -41,10 +37,7 @@ fn mcp_tools_list_includes_optimize_image() {
     let v: serde_json::Value = serde_json::from_str(&line).expect("json parse");
     assert_eq!(v["id"], serde_json::json!(1));
     let tools = v["result"]["tools"].as_array().expect("tools array");
-    let names: Vec<&str> = tools
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
+    let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
     assert!(names.contains(&"optimize_image"));
     assert!(names.contains(&"get_savings_stats"));
     assert!(names.contains(&"sandbox_execute"));
@@ -108,11 +101,7 @@ fn mcp_unknown_method_returns_error() {
         .expect("spawn mcp");
 
     let stdin = child.stdin.as_mut().unwrap();
-    writeln!(
-        stdin,
-        r#"{{"jsonrpc":"2.0","id":99,"method":"nope"}}"#
-    )
-    .unwrap();
+    writeln!(stdin, r#"{{"jsonrpc":"2.0","id":99,"method":"nope"}}"#).unwrap();
     stdin.flush().unwrap();
 
     let stdout = child.stdout.take().unwrap();
