@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "vision-squeezer"
-version = "0.2.0"
+version = "0.2.1"
 description = "LLM-native image optimization — reduces vision model token consumption by snapping to tile boundaries"
 readme = "README.md"
 requires-python = ">=3.8"

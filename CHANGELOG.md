@@ -7,6 +7,17 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.1] - 2026-05-24
+
+### Added
+- **CSV export for stats**: `vision-squeezer stats --csv` emits full optimization history to stdout. `--csv-output <path>` writes to a file. Columns: `timestamp,model,original_tokens,optimized_tokens,token_savings,original_bytes,optimized_bytes,byte_savings,mode`.
+- `Persistence::get_all_history()` — unbounded history retrieval (the existing `get_stats()` is still capped at the last 50 for the dashboard view).
+
+### Fixed
+- `cargo fmt --check` regressions across `benches/pipeline.rs`, `src/lib.rs`, `src/main.rs`, `tests/cli.rs`, `tests/mcp.rs`. CI lint job now green.
+
+---
+
 ## [0.2.0] - 2026-05-24
 
 ### Added

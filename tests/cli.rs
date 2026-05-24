@@ -178,6 +178,39 @@ fn cli_auto_quality_picks_value_in_range_and_reports_it() {
 }
 
 #[test]
+fn cli_stats_csv_emits_valid_header() {
+    let output = Command::cargo_bin("vision-squeezer")
+        .unwrap()
+        .args(["stats", "--csv"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let first_line = stdout.lines().next().expect("csv header");
+    assert_eq!(
+        first_line,
+        "timestamp,model,original_tokens,optimized_tokens,token_savings,original_bytes,optimized_bytes,byte_savings,mode"
+    );
+}
+
+#[test]
+fn cli_stats_csv_output_writes_file() {
+    let dir = tempdir().unwrap();
+    let csv_path = dir.path().join("history.csv");
+
+    Command::cargo_bin("vision-squeezer")
+        .unwrap()
+        .args(["stats", "--csv-output", csv_path.to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert!(csv_path.exists(), "csv file should be written");
+    let contents = fs::read_to_string(&csv_path).unwrap();
+    assert!(contents.starts_with("timestamp,model,"));
+}
+
+#[test]
 fn cli_batch_json_aggregates_files() {
     let dir = tempdir().unwrap();
     make_fixture(&dir.path().join("a.png"), 600, 400);

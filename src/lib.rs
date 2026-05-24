@@ -1323,4 +1323,27 @@ impl Persistence {
             history,
         })
     }
+
+    pub fn get_all_history() -> Result<Vec<OptimizationReport>, String> {
+        let conn = Connection::open(Self::get_db_path()).map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(
+            "SELECT timestamp, model, original_tokens, optimized_tokens, original_bytes, optimized_bytes, mode
+             FROM optimizations ORDER BY timestamp ASC"
+        ).map_err(|e| e.to_string())?;
+
+        stmt.query_map([], |row| {
+            Ok(OptimizationReport {
+                timestamp: row.get(0)?,
+                model: row.get(1)?,
+                original_tokens: row.get(2)?,
+                optimized_tokens: row.get(3)?,
+                original_bytes: row.get::<_, i64>(4)? as u64,
+                optimized_bytes: row.get::<_, i64>(5)? as u64,
+                mode: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+    }
 }

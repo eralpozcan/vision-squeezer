@@ -11,6 +11,8 @@ const IMAGE_EXTS: &[&str] = &["jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif"
 fn print_usage() {
     eprintln!("Usage: vision-squeezer <image> [options]");
     eprintln!("       vision-squeezer stats          (show cumulative savings)");
+    eprintln!("       vision-squeezer stats --csv    (export full history as CSV to stdout)");
+    eprintln!("       vision-squeezer stats --csv-output <path>  (write CSV to file)");
     eprintln!("       vision-squeezer /vision-stats  (alias for stats)");
     eprintln!("       vision-squeezer setup-hook    (print shell integration script)");
     eprintln!("\nOptions:");
@@ -55,7 +57,18 @@ fn main() {
         args.get(1).map(|s| s.as_str()),
         Some("stats") | Some("/vision-stats")
     ) {
-        print_stats();
+        let csv_mode = args.iter().any(|a| a == "--csv");
+        let csv_output = args
+            .iter()
+            .position(|a| a == "--csv-output")
+            .and_then(|i| args.get(i + 1))
+            .map(PathBuf::from);
+
+        if csv_mode || csv_output.is_some() {
+            export_stats_csv(csv_output);
+        } else {
+            print_stats();
+        }
         return;
     }
 
@@ -855,5 +868,45 @@ fn print_stats() {
             }
         }
         Err(e) => eprintln!("Error retrieving stats: {}", e),
+    }
+}
+
+fn export_stats_csv(output: Option<PathBuf>) {
+    let history = match vision_squeezer::Persistence::get_all_history() {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("Error retrieving history: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut buf = String::new();
+    buf.push_str("timestamp,model,original_tokens,optimized_tokens,token_savings,original_bytes,optimized_bytes,byte_savings,mode\n");
+    for r in &history {
+        let token_sav = r.original_tokens.saturating_sub(r.optimized_tokens);
+        let byte_sav = r.original_bytes.saturating_sub(r.optimized_bytes);
+        buf.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{}\n",
+            r.timestamp,
+            r.model,
+            r.original_tokens,
+            r.optimized_tokens,
+            token_sav,
+            r.original_bytes,
+            r.optimized_bytes,
+            byte_sav,
+            r.mode,
+        ));
+    }
+
+    match output {
+        Some(path) => {
+            if let Err(e) = std::fs::write(&path, &buf) {
+                eprintln!("Error writing CSV to {}: {}", path.display(), e);
+                std::process::exit(1);
+            }
+            eprintln!("Wrote {} rows to {}", history.len(), path.display());
+        }
+        None => print!("{}", buf),
     }
 }
