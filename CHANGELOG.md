@@ -7,6 +7,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.2] - 2026-05-24
+
+### Fixed
+- **CI: manylinux bumped to 2_28** — Python wheel builds for `aarch64` were failing with `libwebp-sys` v0.9.6 due to GCC 4.8 in manylinux2014 lacking C99 mode and ARMv8.2 NEON element-indexed instruction support.
+- **CI: crates.io re-publish tolerance** — Re-running a release tag after a partial CI failure no longer fails the job when the version is already published on crates.io.
+- **CI: `cargo publish --token` deprecation** — Moved registry token to `CARGO_REGISTRY_TOKEN` environment variable.
+
+---
+
 ## [0.2.1] - 2026-05-24
 
 ### Added
