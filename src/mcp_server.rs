@@ -76,9 +76,9 @@ fn tools_list() -> Value {
                         },
                         "output_format": {
                             "type": "string",
-                            "enum": ["jpeg", "webp"],
+                            "enum": ["jpeg", "webp", "avif"],
                             "default": "jpeg",
-                            "description": "Output encoding. WebP is typically 30-50% smaller than JPEG at equal quality."
+                            "description": "Output encoding. WebP is typically 30-50% smaller than JPEG at equal quality; AVIF is typically another 20-50% smaller than WebP."
                         },
                         "quality": {
                             "type": "integer",
@@ -247,6 +247,7 @@ fn handle_optimize_image(id: Value, args: Value) -> Response {
         .unwrap_or("jpeg")
     {
         "webp" => OutputFormat::WebP,
+        "avif" => OutputFormat::Avif,
         _ => OutputFormat::Jpeg,
     };
     let mut cfg_builder = ProcessConfig::builder()

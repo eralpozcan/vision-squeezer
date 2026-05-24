@@ -149,6 +149,10 @@ const installData = {
     'claude-skill': {
         comment: "# Zero-overhead /vision-stats skill for Claude Code",
         code: '# Option 1: Auto-install via shell hook (recommended)\neval "$(vision-squeezer setup-hook)"\n\n# Option 2: Install via Claude Code marketplace\n# Add to ~/.claude/settings.json > extraKnownMarketplaces:\n# "vision-squeezer": { "source": { "source": "github", "repo": "eralpozcan/vision-squeezer" } }\n# Then in Claude Code:\n/plugins add vision-stats@vision-squeezer'
+    },
+    'python': {
+        comment: "# Python bindings via pyo3 / maturin",
+        code: 'pip install vision-squeezer\n\n# Usage\nimport vision_squeezer as vs\nreport = vs.optimize_image(\n    "screenshot.png",\n    model="claude",\n    auto_quality=0.95,\n    output_path="screenshot.optimized.jpg",\n)\nprint(report["tokens_saved"], report["size_reduction_pct"])'
     }
 };
 

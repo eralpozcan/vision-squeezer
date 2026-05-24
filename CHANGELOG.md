@@ -7,6 +7,33 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.0] - 2026-05-24
+
+### Added
+- **`--json` flag**: emit a machine-readable JSON record per invocation (CLI + batch). Suppresses human table output for pipeline use.
+- **`--dry-run` flag**: run the full pipeline (incl. token math) without writing to disk or updating the stats DB.
+- **Batch / recursive mode**: pass a directory as input. `--recursive` walks subtrees, `--output-dir` mirrors structure. Combined with `--json` emits an aggregate record with per-file array + totals.
+- **AVIF output**: `--format avif`. Typically 20–50% smaller than WebP at equal quality, ~3× smaller than JPEG. Token math unchanged (format ≠ tokens).
+- **`--smart-crop` flag**: Sobel-lite gradient-energy crop. Finds the bounding box of high-edge-density regions instead of the corner-tolerance crop, which is more aggressive on photographic content while preserving the salient subject.
+- **`--auto-quality <target>` flag**: binary-searches output quality in [40,95] to hit a given SSIM target (typically 0.95). Picks the smallest file that still passes a perceptual threshold.
+- **Integration tests** (`tests/cli.rs`, `tests/mcp.rs`) and **criterion benches** (`benches/pipeline.rs`).
+- **Python bindings**: new `python/` subcrate using pyo3 + maturin. `pip install vision-squeezer` (once published). Exposes `optimize_image`, `estimate_tokens`, `optimal_dimensions` with full feature parity including smart-crop and auto-quality. CI workflow auto-builds wheels for Linux/macOS/Windows on tag push.
+
+### Public API
+- `OutputFormat::Avif` variant
+- `ProcessConfig::smart_crop` (builder: `.smart_crop(bool)`)
+- `vision_squeezer::saliency_crop(&DynamicImage, margin: u32) -> DynamicImage`
+- `vision_squeezer::ssim(&DynamicImage, &DynamicImage) -> f64`
+- `vision_squeezer::encode_with_auto_quality(&DynamicImage, &ProcessConfig, target: f64, min_q: u8, max_q: u8) -> Result<(Vec<u8>, u8), String>`
+
+### MCP
+- `optimize_image.output_format` schema now accepts `"avif"` (additive — existing `"jpeg"` and `"webp"` unchanged).
+
+### Changed
+- CLI single-file flow extracted into `run_one`; new `run_batch` dispatcher for directories.
+
+---
+
 ## [0.1.9] - 2026-05-15
 
 ### Fixed

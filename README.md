@@ -205,14 +205,27 @@ Then use the binary path directly in any config above instead of `npx`:
 
 ```bash
 vision-squeezer path/to/image.jpg \
-  --mode auto|ocr|standard \ # default: auto (detects text/grayscale)
-  --format jpeg|webp \     # default: jpeg
-  --quality 85 \           # output quality 1-100 (default: 75)
-  --tile-size 256 \        # patch size in px (default: 512)
-  --no-crop \              # disable padding removal
-  --bg-tolerance 25 \      # background detection 0-255 (default: 15)
-  --model claude|gpt4o|gpt5|gemini \  # model-aware resizing
-  --max-tiles 20           # hard cap on tile count
+  --mode auto|ocr|standard \      # default: auto (detects text/grayscale)
+  --format jpeg|webp|avif \       # default: jpeg
+  --quality 85 \                  # output quality 1-100 (default: 75)
+  --tile-size 256 \               # patch size in px (default: 512)
+  --no-crop \                     # disable padding removal
+  --smart-crop \                  # edge-energy crop (vs corner-tolerance)
+  --auto-quality 0.95 \           # binary-search quality to hit SSIM target
+  --bg-tolerance 25 \             # background detection 0-255 (default: 15)
+  --model claude|gpt4o|gpt5|gemini \ # model-aware resizing
+  --max-tiles 20 \                # hard cap on tile count
+  --json \                        # machine-readable JSON output
+  --dry-run                       # run pipeline, skip disk write
+```
+
+### Batch mode
+
+Pass a directory instead of a file:
+
+```bash
+vision-squeezer ./screenshots --recursive --output-dir ./optimized
+vision-squeezer ./screenshots --recursive --json > report.json
 ```
 
 ---

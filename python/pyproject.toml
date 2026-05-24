@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[project]
+name = "vision-squeezer"
+version = "0.2.0"
+description = "LLM-native image optimization — reduces vision model token consumption by snapping to tile boundaries"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Elastic-2.0" }
+authors = [{ name = "Eralp Ozcan" }]
+keywords = ["llm", "vision", "image-optimization", "tokens", "claude", "gpt", "gemini"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics",
+]
+
+[project.urls]
+Homepage = "https://github.com/eralpozcan/vision-squeezer"
+Repository = "https://github.com/eralpozcan/vision-squeezer"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "vision_squeezer"

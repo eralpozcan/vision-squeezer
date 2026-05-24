@@ -1,5 +1,16 @@
 /target
+**/target/
 node_modules
 .DS_Store
 .claude/
 *.optimized.*
+
+# Python build artifacts
+python/dist/
+python/build/
+python/*.egg-info/
+__pycache__/
+*.pyc
+*.so
+*.pyd
+*.dylib

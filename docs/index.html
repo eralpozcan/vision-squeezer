@@ -58,7 +58,7 @@
         "price": "0",
         "priceCurrency": "USD"
       },
-      "softwareVersion": "0.1.5",
+      "softwareVersion": "0.2.0",
       "url": "https://github.com/eralpozcan/vision-squeezer"
     }
     </script>
@@ -84,7 +84,7 @@
     <main>
         <section class="hero">
             <div class="hero-content fade-in">
-                <div class="badge" id="version-badge">v0.1.5 Released 🚀</div>
+                <div class="badge" id="version-badge">v0.2.0 Released 🚀</div>
                 <h1 class="hero-title">Stop Leaking <br><span class="text-gradient">Vision Tokens.</span></h1>
                 <p class="hero-subtitle">
                     The ultimate LLM-native image optimization middleware. It mathematically snaps your images to Claude, GPT, and Gemini's exact internal grid boundaries to slash token usage by up to 90% without losing visual detail.
@@ -142,6 +142,26 @@ Output: 4095×2048  (1.2 MB)
                     <div class="icon mcp-icon">🔌</div>
                     <h3>Universal MCP</h3>
                     <p>Works natively with Claude Code, Cursor, Zed, and VS Code. No complex setup, just plug it into your favorite AI tool.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon">🅰️</div>
+                    <h3>AVIF Output <span style="font-size:0.7rem;color:var(--primary);">v0.2</span></h3>
+                    <p>New <code>--format avif</code> encodes ~20–50% smaller than WebP at equal quality, ~3× smaller than JPEG. Same tokens, less bandwidth.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon">🎯</div>
+                    <h3>Smart Crop & Auto-Quality <span style="font-size:0.7rem;color:var(--primary);">v0.2</span></h3>
+                    <p><code>--smart-crop</code> uses edge-energy (Sobel-lite) to keep only high-information regions. <code>--auto-quality 0.95</code> binary-searches quality to hit a perceptual SSIM target.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon">📦</div>
+                    <h3>Batch &amp; JSON Output <span style="font-size:0.7rem;color:var(--primary);">v0.2</span></h3>
+                    <p>Pass a directory + <code>--recursive</code> to squeeze a whole tree at once. <code>--json</code> emits a structured record (per-file or aggregate) for pipelines. <code>--dry-run</code> reports without writing.</p>
+                </div>
+                <div class="feature-card glass-panel hover-lift">
+                    <div class="icon">🐍</div>
+                    <h3>Python Bindings <span style="font-size:0.7rem;color:var(--primary);">v0.2</span></h3>
+                    <p><code>pip install vision-squeezer</code> ships native wheels via pyo3 + maturin. <code>optimize_image()</code>, <code>estimate_tokens()</code>, and <code>optimal_dimensions()</code> for Linux/macOS/Windows.</p>
                 </div>
             </div>
 
@@ -219,6 +239,7 @@ Output: 4095×2048  (1.2 MB)
                     <option value="claude-desktop">Claude Desktop (Mac/Win)</option>
                     <option value="shell-hook">Shell Integration (Zsh/Bash)</option>
                     <option value="claude-skill">Claude Code Skill (/vision-stats)</option>
+                    <option value="python">Python (pip install)</option>
                 </select>
             </div>
 

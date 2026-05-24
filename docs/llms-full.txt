@@ -9,12 +9,16 @@ Claude bills based on the formula `(Width * Height) / 750`.
 - **Optimization Strategy:** Maximize resolution while minimizing pixel count by stripping all non-essential solid-color padding and snap-down resizing.
 
 ### OpenAI GPT-4o / GPT-4.5 (Tiling)
-OpenAI rescales the short side to 768px, then chops into 512px tiles.
+OpenAI fits the image within 2048×2048, rescales the short side to 768px, then chops into 512px tiles.
 - **Optimization Strategy:** Reverse-calculate the 768px scaling. Snap the long side to a 512px boundary *after* the internal 768px scale factor is applied. This avoids "spill-over" tiles that double the cost for just a few extra pixels.
 
+### OpenAI GPT-5 / GPT-5.5 (Tiling, Capped)
+6000px max dim, 10.24M total pixel cap, 512×512 tiles, 1536 token cap.
+- **Optimization Strategy:** Snap to 512px boundaries; tokens above the cap are wasted, so a 1536-token image and a 5000-token image are billed identically.
+
 ### Google Gemini (Large Tiles)
-Gemini uses a 768x768 tiling grid.
-- **Optimization Strategy:** Aggressively snap to 768px boundaries. An 800px image costs 1032 tokens (2x1 tiles), but a 768px image costs only 258 tokens (1 tile).
+Gemini uses a flat 258 tokens for ≤384×384, otherwise 768×768 tiling grid (258 tokens/tile).
+- **Optimization Strategy:** Aggressively snap to 768px boundaries. An 800px image costs 516 tokens (2×1 tiles), but a 768px image costs only 258 tokens (1 tile).
 
 ## MCP Server Specification
 The server implements the Model Context Protocol (MCP) and provides tools for automated image optimization.
@@ -24,6 +28,7 @@ The server implements the Model Context Protocol (MCP) and provides tools for au
    - `image_base64`: Input image.
    - `target_model`: `claude`, `gpt4o`, `gpt5`, `gemini`.
    - `mode`: `standard`, `ocr`, `auto`.
+   - `output_format`: `jpeg`, `webp`, `avif`.
 2. `sandbox_execute`: Think-in-Code paradigm.
    - `operations`: Array of `ImageOp`.
    - Operations: `crop`, `grayscale`, `binarize`, `resize`, `contrast`, `brightness`.
@@ -31,9 +36,25 @@ The server implements the Model Context Protocol (MCP) and provides tools for au
 
 ## CLI Technical Reference
 - `vision-squeezer <image> --model <name>`: Model-aware resize.
+- `vision-squeezer <dir> --recursive [--output-dir DIR]`: Batch mode, mirror tree.
+- `--format jpeg|webp|avif`: Output encoding. AVIF default for new pipelines.
+- `--quality 1-100`: Output quality (default 75).
+- `--auto-quality 0.0..1.0`: Binary-search quality in [40,95] to hit SSIM target.
+- `--smart-crop`: Edge-energy (Sobel-lite) crop. Better than corner-tolerance for photographic content.
 - `--ops '<JSON>'`: Execute Sandbox operations.
-- `--output <path>`: Custom output destination.
+- `--output <path>`: Custom output destination (single-file mode).
+- `--output-dir <path>`: Output destination root (batch mode, mirrors structure).
 - `--max-tiles <N>`: Hard cap on token budget.
+- `--json`: Machine-readable JSON output (single-file or batch aggregate).
+- `--dry-run`: Run the full pipeline without writing to disk or updating the stats DB.
+
+## Python Bindings
+`pip install vision-squeezer` provides:
+- `optimize_image(input, model=..., quality=75, format="jpeg", smart_crop=False, auto_quality=None, output_path=None, ...) -> dict`
+- `estimate_tokens(width, height, model="claude") -> dict`
+- `optimal_dimensions(width, height, model="claude") -> dict`
+
+Inputs accept both `str` (file paths) and `bytes` (raw image data). Returns dict with `bytes`, `base64`, dimensions, byte counts, token counts, and chosen quality.
 
 ## Local Persistence
 Data is stored in `~/.vision-squeezer/stats.db` (SQLite).
@@ -43,4 +64,7 @@ Data is stored in `~/.vision-squeezer/stats.db` (SQLite).
 ## Best Practices for AI Agents
 - Always use `sandbox_execute` if you only need to see a specific part of a high-resolution image (e.g., a specific error log in a screenshot).
 - Use `get_savings_stats` to report ROI to the human user.
-- Prefer `webp` output format for 30-50% smaller file uploads without quality loss.
+- For new pipelines, prefer **`avif`** output format (typically 20–50% smaller than WebP, ~3× smaller than JPEG at equal quality). Token math is independent of format.
+- Use `--auto-quality 0.95` when bandwidth matters and the agent can tolerate some perceptual loss — the binary search lands on the smallest file that still passes a 0.95 SSIM threshold.
+- Use `--smart-crop` for photographs / saliency-heavy content; use the default crop for screenshots with solid borders.
+- For pipelines integrating into other tools, prefer `--json --dry-run` to estimate token impact before any disk writes.

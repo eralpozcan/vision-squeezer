@@ -15,6 +15,8 @@ pub enum OutputFormat {
     Jpeg,
     /// WebP at configured quality — typically 30-50% smaller than JPEG at equal quality.
     WebP,
+    /// AVIF at configured quality — typically 20-50% smaller than WebP at equal quality.
+    Avif,
 }
 
 /// All tuneable knobs for the pipeline.
@@ -34,6 +36,8 @@ pub struct ProcessConfig {
     pub target_model: Option<VisionModel>,
     /// Limit the maximum number of tiles the output image can consume.
     pub max_tiles: Option<u32>,
+    /// Use saliency (edge-energy) based crop instead of corner-tolerance crop.
+    pub smart_crop: bool,
 }
 
 impl Default for ProcessConfig {
@@ -46,6 +50,7 @@ impl Default for ProcessConfig {
             output_format: OutputFormat::Jpeg,
             target_model: None,
             max_tiles: None,
+            smart_crop: false,
         }
     }
 }
@@ -85,6 +90,10 @@ impl ProcessConfigBuilder {
     }
     pub fn max_tiles(mut self, m: u32) -> Self {
         self.0.max_tiles = Some(m);
+        self
+    }
+    pub fn smart_crop(mut self, b: bool) -> Self {
+        self.0.smart_crop = b;
         self
     }
     pub fn build(self) -> ProcessConfig {
@@ -405,7 +414,11 @@ pub fn process(
     };
 
     let after_crop = if cfg.crop {
-        crop_padding(img, cfg.bg_tolerance)
+        if cfg.smart_crop {
+            saliency_crop(&img, 16)
+        } else {
+            crop_padding(img, cfg.bg_tolerance)
+        }
     } else {
         img
     };
@@ -615,6 +628,171 @@ fn first_non_bg_col(img: &image::RgbaImage, bg: image::Rgba<u8>, tol: u8, from_l
     0
 }
 
+// ── Saliency Crop (edge-energy based) ─────────────────────────────────────────
+
+/// Crop to the bounding box of high-energy (edge) pixels.
+/// Uses a Sobel-lite gradient magnitude per luma pixel. Pixels above 2× the
+/// mean gradient energy define the salient region; the bbox is expanded by
+/// `margin` pixels on every side.
+///
+/// Falls back to the input unchanged for uniform images (no salient region).
+pub fn saliency_crop(img: &DynamicImage, margin: u32) -> DynamicImage {
+    let gray = img.to_luma8();
+    let (w, h) = gray.dimensions();
+    if w < 3 || h < 3 {
+        return img.clone();
+    }
+
+    let mut energy = vec![0u32; (w * h) as usize];
+    let mut total: u64 = 0;
+    for y in 1..h - 1 {
+        for x in 1..w - 1 {
+            let l = gray.get_pixel(x - 1, y).0[0] as i32;
+            let r = gray.get_pixel(x + 1, y).0[0] as i32;
+            let t = gray.get_pixel(x, y - 1).0[0] as i32;
+            let b = gray.get_pixel(x, y + 1).0[0] as i32;
+            let e = ((r - l).abs() + (b - t).abs()) as u32;
+            energy[(y * w + x) as usize] = e;
+            total += e as u64;
+        }
+    }
+    let count = (w as u64) * (h as u64);
+    let mean = (total / count.max(1)) as u32;
+    let threshold = mean.saturating_mul(2).max(8);
+
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (w, h, 0u32, 0u32);
+    for y in 0..h {
+        for x in 0..w {
+            if energy[(y * w + x) as usize] > threshold {
+                if x < min_x {
+                    min_x = x;
+                }
+                if y < min_y {
+                    min_y = y;
+                }
+                if x > max_x {
+                    max_x = x;
+                }
+                if y > max_y {
+                    max_y = y;
+                }
+            }
+        }
+    }
+
+    if min_x >= max_x || min_y >= max_y {
+        return img.clone();
+    }
+
+    let x0 = min_x.saturating_sub(margin);
+    let y0 = min_y.saturating_sub(margin);
+    let x1 = (max_x + 1 + margin).min(w);
+    let y1 = (max_y + 1 + margin).min(h);
+    img.crop_imm(x0, y0, x1 - x0, y1 - y0)
+}
+
+// ── SSIM + Auto-Quality ───────────────────────────────────────────────────────
+
+/// Compute structural-similarity (single-window, luma) between two images.
+///
+/// Returns a value in [-1, 1]; 1.0 means identical. Both images are converted
+/// to grayscale; if dimensions differ, the smaller is rescaled to match the
+/// larger via Lanczos3.
+pub fn ssim(a: &DynamicImage, b: &DynamicImage) -> f64 {
+    let (aw, ah) = (a.width(), a.height());
+    let (bw, bh) = (b.width(), b.height());
+    let (target_w, target_h) = (aw.max(bw), ah.max(bh));
+
+    let resize_if_needed = |img: &DynamicImage| -> image::GrayImage {
+        if img.width() == target_w && img.height() == target_h {
+            img.to_luma8()
+        } else {
+            img.resize_exact(target_w, target_h, FilterType::Lanczos3)
+                .to_luma8()
+        }
+    };
+
+    let a_luma = resize_if_needed(a);
+    let b_luma = resize_if_needed(b);
+
+    let n = (target_w as u64 * target_h as u64).max(1) as f64;
+    let (mut sum_a, mut sum_b) = (0f64, 0f64);
+    for (pa, pb) in a_luma.pixels().zip(b_luma.pixels()) {
+        sum_a += pa.0[0] as f64;
+        sum_b += pb.0[0] as f64;
+    }
+    let mean_a = sum_a / n;
+    let mean_b = sum_b / n;
+
+    let (mut var_a, mut var_b, mut cov) = (0f64, 0f64, 0f64);
+    for (pa, pb) in a_luma.pixels().zip(b_luma.pixels()) {
+        let da = pa.0[0] as f64 - mean_a;
+        let db = pb.0[0] as f64 - mean_b;
+        var_a += da * da;
+        var_b += db * db;
+        cov += da * db;
+    }
+    var_a /= n;
+    var_b /= n;
+    cov /= n;
+
+    let c1 = (0.01f64 * 255.0).powi(2);
+    let c2 = (0.03f64 * 255.0).powi(2);
+    let num = (2.0 * mean_a * mean_b + c1) * (2.0 * cov + c2);
+    let den = (mean_a.powi(2) + mean_b.powi(2) + c1) * (var_a + var_b + c2);
+    if den.abs() < f64::EPSILON {
+        1.0
+    } else {
+        num / den
+    }
+}
+
+/// Binary-search the lowest quality in [`min_q`, `max_q`] that meets a given
+/// SSIM target against the original. Returns the encoded bytes and the quality used.
+///
+/// Used when callers want "automatic" quality: pick the smallest file that still
+/// passes a perceptual threshold (typically 0.95).
+pub fn encode_with_auto_quality(
+    original: &DynamicImage,
+    cfg: &ProcessConfig,
+    target_ssim: f64,
+    min_q: u8,
+    max_q: u8,
+) -> Result<(Vec<u8>, u8), String> {
+    let mut lo = min_q.max(1);
+    let mut hi = max_q.min(100).max(lo + 1);
+    let mut best: Option<(Vec<u8>, u8)> = None;
+
+    while hi.saturating_sub(lo) > 2 {
+        let mid = lo + (hi - lo) / 2;
+        let trial = ProcessConfig {
+            quality: mid,
+            ..cfg.clone()
+        };
+        let bytes = encode_to_bytes(original, &trial)?;
+        let decoded = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+        let score = ssim(original, &decoded);
+        if score >= target_ssim {
+            best = Some((bytes, mid));
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+
+    // If no quality met the target during the search, encode at max_q as fallback.
+    if let Some((b, q)) = best {
+        Ok((b, q))
+    } else {
+        let trial = ProcessConfig {
+            quality: hi,
+            ..cfg.clone()
+        };
+        let bytes = encode_to_bytes(original, &trial)?;
+        Ok((bytes, hi))
+    }
+}
+
 // ── Step 3: OCR Binarization ───────────────────────────────────────────────────
 
 pub fn binarize(img: DynamicImage) -> DynamicImage {
@@ -694,6 +872,22 @@ pub fn encode_to_bytes(img: &DynamicImage, cfg: &ProcessConfig) -> Result<Vec<u8
             let enc = webp::Encoder::from_rgb(rgb.as_raw(), rgb.width(), rgb.height());
             let mem = enc.encode(cfg.quality as f32);
             Ok(mem.to_vec())
+        }
+        OutputFormat::Avif => {
+            use image::ImageEncoder;
+            use image::codecs::avif::AvifEncoder;
+            let mut buf = Cursor::new(Vec::new());
+            let rgba = img.to_rgba8();
+            // Speed 6 is a reasonable balance; lower = better compression but slower.
+            AvifEncoder::new_with_speed_quality(&mut buf, 6, cfg.quality)
+                .write_image(
+                    rgba.as_raw(),
+                    rgba.width(),
+                    rgba.height(),
+                    image::ExtendedColorType::Rgba8,
+                )
+                .map_err(|e| e.to_string())?;
+            Ok(buf.into_inner())
         }
     }
 }
@@ -899,6 +1093,60 @@ mod tests {
         for p in result.pixels() {
             assert!(p.0[0] == 0 || p.0[0] == 255);
         }
+    }
+
+    #[test]
+    fn ssim_identical_images_is_one() {
+        use image::{DynamicImage, Rgba, RgbaImage};
+        let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([128, 128, 128, 255])));
+        let s = ssim(&img, &img);
+        assert!((s - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ssim_very_different_images_is_low() {
+        use image::{DynamicImage, Rgba, RgbaImage};
+        let black = DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([0, 0, 0, 255])));
+        let white = DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([255, 255, 255, 255])));
+        let s = ssim(&black, &white);
+        assert!(s < 0.1, "expected low SSIM, got {s}");
+    }
+
+    #[test]
+    fn saliency_crop_tightens_around_high_energy_region() {
+        use image::{DynamicImage, Rgba, RgbaImage};
+        // Uniform white field with a 200x200 textured block in the middle of a 1000x1000 image.
+        let mut img = RgbaImage::from_pixel(1000, 1000, Rgba([255, 255, 255, 255]));
+        for x in 400..600 {
+            for y in 400..600 {
+                // checker pattern to generate edge energy
+                let v = if (x + y) % 2 == 0 { 0 } else { 255 };
+                img.put_pixel(x, y, Rgba([v, v, v, 255]));
+            }
+        }
+        let dyn_img = DynamicImage::ImageRgba8(img);
+        let cropped = saliency_crop(&dyn_img, 8);
+        assert!(cropped.width() < 1000);
+        assert!(cropped.height() < 1000);
+        // expect to land near the 200×200 block plus margin
+        assert!(cropped.width() < 400);
+        assert!(cropped.height() < 400);
+    }
+
+    #[test]
+    fn auto_quality_returns_quality_in_range() {
+        use image::{DynamicImage, Rgba, RgbaImage};
+        let mut img = RgbaImage::from_pixel(256, 256, Rgba([100, 100, 100, 255]));
+        for x in 0..256 {
+            for y in 0..256 {
+                img.put_pixel(x, y, Rgba([(x % 256) as u8, (y % 256) as u8, 128, 255]));
+            }
+        }
+        let dyn_img = DynamicImage::ImageRgba8(img);
+        let cfg = ProcessConfig::default();
+        let (bytes, q) = encode_with_auto_quality(&dyn_img, &cfg, 0.95, 40, 95).expect("ok");
+        assert!((40..=95).contains(&q));
+        assert!(!bytes.is_empty());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "vision-squeezer"
-version = "0.1.9"
+version = "0.2.0"
 edition = "2024"
 default-run = "vision-squeezer"
 description = "LLM-native image optimization middleware & MCP server. Reduces vision model token consumption by snapping to tile boundaries."
@@ -10,7 +10,7 @@ categories = ["multimedia::images", "command-line-utilities"]
 repository = "https://github.com/eralpozcan/vision-squeezer"
 
 [dependencies]
-image = "0.25"
+image = { version = "0.25", features = ["avif"] }
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -26,3 +26,12 @@ path = "src/main.rs"
 [[bin]]
 name = "vision-squeezer-mcp"
 path = "src/mcp_server.rs"
+
+[dev-dependencies]
+assert_cmd = "2"
+tempfile = "3"
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "pipeline"
+harness = false

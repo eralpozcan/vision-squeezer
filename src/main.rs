@@ -1,10 +1,12 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use vision_squeezer::{
-    OutputFormat, ProcessConfig, ProcessMode, VisionModel, encode_to_bytes, process,
+    ImageOp, OutputFormat, ProcessConfig, ProcessMode, VisionModel, encode_to_bytes, process,
     token_savings_table,
 };
+
+const IMAGE_EXTS: &[&str] = &["jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif"];
 
 fn print_usage() {
     eprintln!("Usage: vision-squeezer <image> [options]");
@@ -13,7 +15,7 @@ fn print_usage() {
     eprintln!("       vision-squeezer setup-hook    (print shell integration script)");
     eprintln!("\nOptions:");
     eprintln!("  --mode ocr|standard|auto  (default: auto)");
-    eprintln!("  --format jpeg|webp         (default: jpeg)");
+    eprintln!("  --format jpeg|webp|avif    (default: jpeg)");
     eprintln!("  --quality 1-100            (default: 75)");
     eprintln!("  --tile-size N              (default: 512)");
     eprintln!("  --no-crop");
@@ -21,6 +23,12 @@ fn print_usage() {
     eprintln!("  --model claude|gpt4o|gpt5|gemini  model-aware resizing");
     eprintln!("  --max-tiles N              (limit maximum token tiles)");
     eprintln!("  --output, -o <path>        (custom output path)");
+    eprintln!("  --json                     (machine-readable JSON output, suppresses human table)");
+    eprintln!("  --dry-run                  (run pipeline, skip disk write, skip stats logging)");
+    eprintln!("  --recursive, -r            (batch mode: walk subdirs of input directory)");
+    eprintln!("  --output-dir <path>        (batch mode: mirror tree into this directory)");
+    eprintln!("  --smart-crop               (edge-energy crop instead of corner-tolerance)");
+    eprintln!("  --auto-quality <0..1>      (binary-search quality to hit SSIM target, e.g. 0.95)");
     eprintln!("  --ops 'JSON'               (Think in Code: list of atomic operations)");
     eprintln!(
         "                             ex: --ops '[{{\"op\":\"crop\",\"x\":0,\"y\":0,\"width\":100,\"height\":100}},{{\"op\":\"grayscale\"}}]'"
@@ -60,16 +68,18 @@ fn main() {
     }
 
     let path = PathBuf::from(&args[1]);
-    let input_bytes = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-    let img = image::open(&path).expect("failed to open image");
-    let (orig_w, orig_h) = (img.width(), img.height());
 
     // Parse flags
     let mut cfg = ProcessConfig::builder();
     let mut mode = ProcessMode::Auto;
     let mut fmt = OutputFormat::Jpeg;
     let mut custom_output: Option<PathBuf> = None;
-    let mut ops: Vec<vision_squeezer::ImageOp> = Vec::new();
+    let mut output_dir: Option<PathBuf> = None;
+    let mut ops: Vec<ImageOp> = Vec::new();
+    let mut json_output = false;
+    let mut dry_run = false;
+    let mut recursive = false;
+    let mut auto_quality: Option<f64> = None;
     let mut i = 2usize;
     while i < args.len() {
         match args[i].as_str() {
@@ -89,9 +99,11 @@ fn main() {
             }
             "--format" => {
                 i += 1;
-                if args.get(i).map(|s| s.as_str()) == Some("webp") {
-                    fmt = OutputFormat::WebP;
-                }
+                fmt = match args.get(i).map(|s| s.as_str()) {
+                    Some("webp") => OutputFormat::WebP,
+                    Some("avif") => OutputFormat::Avif,
+                    _ => OutputFormat::Jpeg,
+                };
             }
             "--quality" => {
                 i += 1;
@@ -140,60 +152,133 @@ fn main() {
                     ops.extend(parsed);
                 }
             }
+            "--json" => json_output = true,
+            "--dry-run" => dry_run = true,
+            "--recursive" | "-r" => recursive = true,
+            "--output-dir" => {
+                i += 1;
+                if let Some(p) = args.get(i) {
+                    output_dir = Some(PathBuf::from(p));
+                }
+            }
+            "--smart-crop" => {
+                cfg = cfg.smart_crop(true);
+            }
+            "--auto-quality" => {
+                i += 1;
+                if let Some(t) = args.get(i).and_then(|s| s.parse().ok()) {
+                    auto_quality = Some(t);
+                }
+            }
             _ => {}
         }
         i += 1;
     }
     let cfg = cfg.output_format(fmt).build();
 
-    println!(
-        "Input:  {}×{}  ({:.1} MB)",
-        orig_w,
-        orig_h,
-        input_bytes as f64 / 1_048_576.0
-    );
+    let opts = RunOpts {
+        cfg: &cfg,
+        mode,
+        custom_output,
+        output_dir,
+        ops,
+        json_output,
+        dry_run,
+        quiet: false,
+        auto_quality,
+    };
 
-    let img = if !ops.is_empty() {
-        println!("Sandbox: Applying {} operations...", ops.len());
-        vision_squeezer::process_with_operations(img, ops)
+    if path.is_dir() {
+        run_batch(&path, recursive, &opts);
+    } else {
+        let _ = run_one(&path, &opts);
+    }
+}
+
+struct RunOpts<'a> {
+    cfg: &'a ProcessConfig,
+    mode: ProcessMode,
+    custom_output: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
+    ops: Vec<ImageOp>,
+    json_output: bool,
+    dry_run: bool,
+    quiet: bool,
+    auto_quality: Option<f64>,
+}
+
+struct FileOutcome {
+    json: serde_json::Value,
+    output_bytes: u64,
+    input_bytes: u64,
+    tiles_before: u32,
+    tiles_after: u32,
+    tokens_before: u32,
+    tokens_after: u32,
+}
+
+fn run_one(path: &Path, opts: &RunOpts) -> Option<FileOutcome> {
+    let cfg = opts.cfg;
+    let mode = opts.mode;
+
+    let input_bytes = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    let img = match image::open(path) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("[skip] {}: {}", path.display(), e);
+            return None;
+        }
+    };
+    let (orig_w, orig_h) = (img.width(), img.height());
+
+    let want_human = !opts.json_output && !opts.quiet;
+
+    if want_human {
+        println!(
+            "Input:  {}  {}×{}  ({:.1} MB)",
+            path.display(),
+            orig_w,
+            orig_h,
+            input_bytes as f64 / 1_048_576.0
+        );
+    }
+
+    let img = if !opts.ops.is_empty() {
+        if want_human {
+            println!("Sandbox: Applying {} operations...", opts.ops.len());
+        }
+        vision_squeezer::process_with_operations(img, opts.ops.clone())
     } else {
         img
     };
 
-    let mut result = process(img, mode, input_bytes, &cfg);
+    let mut result = process(img, mode, input_bytes, cfg);
 
-    // Encode
     let ext = match cfg.output_format {
         OutputFormat::WebP => "webp",
+        OutputFormat::Avif => "avif",
         OutputFormat::Jpeg => "jpg",
     };
-    let out_path = custom_output.unwrap_or_else(|| path.with_extension(format!("optimized.{ext}")));
-    let bytes = encode_to_bytes(&result.image, &cfg).expect("encode failed");
+    let out_path = resolve_output_path(path, opts, ext);
+    let (bytes, used_quality) = if let Some(target) = opts.auto_quality {
+        vision_squeezer::encode_with_auto_quality(&result.image, cfg, target, 40, 95)
+            .expect("auto-quality encode failed")
+    } else {
+        (
+            encode_to_bytes(&result.image, cfg).expect("encode failed"),
+            cfg.quality,
+        )
+    };
     let output_bytes = bytes.len() as u64;
-    fs::write(&out_path, &bytes).expect("write failed");
     result.report.bytes_after = Some(output_bytes);
 
-    println!(
-        "Output: {}×{}  ({:.1} MB, {} q{})",
-        result.width,
-        result.height,
-        output_bytes as f64 / 1_048_576.0,
-        ext.to_uppercase(),
-        cfg.quality,
-    );
-
-    if let Some(pct) = result.report.size_reduction_pct() {
-        println!("File:   {:.1}% smaller", pct);
+    if !opts.dry_run {
+        if let Some(parent) = out_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        fs::write(&out_path, &bytes).expect("write failed");
     }
 
-    println!();
-    println!("── Token Estimates ─────────────────────────────────────────");
-    let table = token_savings_table(orig_w, orig_h, result.width, result.height);
-    table.print();
-    println!("────────────────────────────────────────────────────────────");
-    println!("→ {}", out_path.display());
-
-    // Log to DB for Analytics
     let target_model_name = match cfg.target_model {
         Some(VisionModel::Claude) => "Claude",
         Some(VisionModel::Gpt4o) => "GPT-4o",
@@ -206,14 +291,254 @@ fn main() {
     let orig_tokens = vision_squeezer::estimate_tokens(orig_w, orig_h, m).tokens;
     let opt_tokens = vision_squeezer::estimate_tokens(result.width, result.height, m).tokens;
 
-    let _ = vision_squeezer::Persistence::log_optimization(
-        target_model_name,
-        orig_tokens,
-        opt_tokens,
-        input_bytes,
+    let table = token_savings_table(orig_w, orig_h, result.width, result.height);
+
+    let json = serde_json::json!({
+        "input_path": path.display().to_string(),
+        "output_path": if opts.dry_run { serde_json::Value::Null } else { serde_json::Value::String(out_path.display().to_string()) },
+        "input_width": orig_w,
+        "input_height": orig_h,
+        "output_width": result.width,
+        "output_height": result.height,
+        "input_bytes": input_bytes,
+        "output_bytes": output_bytes,
+        "format": ext,
+        "quality": used_quality,
+        "auto_quality_target": opts.auto_quality,
+        "smart_crop": cfg.smart_crop,
+        "mode": format!("{:?}", mode),
+        "model": target_model_name,
+        "dry_run": opts.dry_run,
+        "tokens": {
+            "before": orig_tokens,
+            "after": opt_tokens,
+            "saved": orig_tokens.saturating_sub(opt_tokens)
+        },
+        "tiles": {
+            "before": result.report.tiles_before,
+            "after": result.report.tiles_after,
+            "saved": result.report.tiles_saved
+        },
+        "size_reduction_pct": result.report.size_reduction_pct(),
+        "token_savings_table": {
+            "claude": { "before": table.claude_before.tokens, "after": table.claude_after.tokens },
+            "gpt4o":  { "before": table.gpt4o_before.tokens,  "after": table.gpt4o_after.tokens },
+            "gpt5":   { "before": table.gpt5_before.tokens,   "after": table.gpt5_after.tokens },
+            "gemini": { "before": table.gemini_before.tokens, "after": table.gemini_after.tokens }
+        }
+    });
+
+    if opts.json_output && !opts.quiet {
+        // single-file JSON; batch caller will aggregate instead
+        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+    } else if want_human {
+        println!(
+            "Output: {}×{}  ({:.1} MB, {} q{}{}){}",
+            result.width,
+            result.height,
+            output_bytes as f64 / 1_048_576.0,
+            ext.to_uppercase(),
+            used_quality,
+            if opts.auto_quality.is_some() { " auto" } else { "" },
+            if opts.dry_run { "  [DRY-RUN — not written]" } else { "" },
+        );
+
+        if let Some(pct) = result.report.size_reduction_pct() {
+            println!("File:   {:.1}% smaller", pct);
+        }
+
+        println!();
+        println!("── Token Estimates ─────────────────────────────────────────");
+        table.print();
+        println!("────────────────────────────────────────────────────────────");
+        if opts.dry_run {
+            println!("→ (dry-run, no file written)");
+        } else {
+            println!("→ {}", out_path.display());
+        }
+    }
+
+    if !opts.dry_run {
+        let _ = vision_squeezer::Persistence::log_optimization(
+            target_model_name,
+            orig_tokens,
+            opt_tokens,
+            input_bytes,
+            output_bytes,
+            &format!("{:?}", mode),
+        );
+    }
+
+    Some(FileOutcome {
+        json,
         output_bytes,
-        &format!("{:?}", mode),
-    );
+        input_bytes,
+        tiles_before: result.report.tiles_before,
+        tiles_after: result.report.tiles_after,
+        tokens_before: orig_tokens,
+        tokens_after: opt_tokens,
+    })
+}
+
+fn resolve_output_path(input: &Path, opts: &RunOpts, ext: &str) -> PathBuf {
+    if let Some(custom) = &opts.custom_output {
+        return custom.clone();
+    }
+    if let Some(out_dir) = &opts.output_dir {
+        let stem = input
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("image");
+        return out_dir.join(format!("{stem}.optimized.{ext}"));
+    }
+    input.with_extension(format!("optimized.{ext}"))
+}
+
+fn run_batch(root: &Path, recursive: bool, opts: &RunOpts) {
+    let files = collect_images(root, recursive);
+    if files.is_empty() {
+        eprintln!("No image files found under {}", root.display());
+        return;
+    }
+
+    if !opts.json_output {
+        println!(
+            "Batch: {} image(s) under {}{}",
+            files.len(),
+            root.display(),
+            if recursive { " (recursive)" } else { "" }
+        );
+        println!();
+    }
+
+    let mut entries: Vec<serde_json::Value> = Vec::with_capacity(files.len());
+    let mut totals = BatchTotals::default();
+
+    for f in &files {
+        let per_opts = RunOpts {
+            cfg: opts.cfg,
+            mode: opts.mode,
+            custom_output: None,
+            output_dir: opts.output_dir.clone().map(|d| mirror_dir(&d, root, f)),
+            ops: opts.ops.clone(),
+            json_output: false,
+            dry_run: opts.dry_run,
+            quiet: opts.json_output,
+            auto_quality: opts.auto_quality,
+        };
+        if let Some(out) = run_one(f, &per_opts) {
+            totals.add(&out);
+            entries.push(out.json);
+        }
+    }
+
+    if opts.json_output {
+        let summary = serde_json::json!({
+            "root": root.display().to_string(),
+            "recursive": recursive,
+            "count": entries.len(),
+            "totals": {
+                "input_bytes": totals.input_bytes,
+                "output_bytes": totals.output_bytes,
+                "bytes_saved": totals.input_bytes.saturating_sub(totals.output_bytes),
+                "tiles_before": totals.tiles_before,
+                "tiles_after": totals.tiles_after,
+                "tokens_before": totals.tokens_before,
+                "tokens_after": totals.tokens_after,
+                "tokens_saved": totals.tokens_before.saturating_sub(totals.tokens_after)
+            },
+            "files": entries
+        });
+        println!("{}", serde_json::to_string_pretty(&summary).unwrap());
+    } else {
+        println!();
+        println!("── Batch Summary ───────────────────────────────────────────");
+        println!("Files:           {}", entries.len());
+        println!(
+            "Total bytes:     {:.2} MB → {:.2} MB  ({:.1}% saved)",
+            totals.input_bytes as f64 / 1_048_576.0,
+            totals.output_bytes as f64 / 1_048_576.0,
+            if totals.input_bytes > 0 {
+                (1.0 - totals.output_bytes as f64 / totals.input_bytes as f64) * 100.0
+            } else {
+                0.0
+            }
+        );
+        println!(
+            "Total tokens:    {} → {}  (saved {})",
+            totals.tokens_before,
+            totals.tokens_after,
+            totals.tokens_before.saturating_sub(totals.tokens_after)
+        );
+        println!("────────────────────────────────────────────────────────────");
+    }
+}
+
+#[derive(Default)]
+struct BatchTotals {
+    input_bytes: u64,
+    output_bytes: u64,
+    tiles_before: u64,
+    tiles_after: u64,
+    tokens_before: u64,
+    tokens_after: u64,
+}
+
+impl BatchTotals {
+    fn add(&mut self, o: &FileOutcome) {
+        self.input_bytes += o.input_bytes;
+        self.output_bytes += o.output_bytes;
+        self.tiles_before += o.tiles_before as u64;
+        self.tiles_after += o.tiles_after as u64;
+        self.tokens_before += o.tokens_before as u64;
+        self.tokens_after += o.tokens_after as u64;
+    }
+}
+
+fn mirror_dir(out_root: &Path, in_root: &Path, file: &Path) -> PathBuf {
+    let rel = file.parent().and_then(|p| p.strip_prefix(in_root).ok());
+    match rel {
+        Some(r) => out_root.join(r),
+        None => out_root.to_path_buf(),
+    }
+}
+
+fn collect_images(root: &Path, recursive: bool) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let _ = collect_into(root, recursive, &mut out);
+    out.sort();
+    out
+}
+
+fn collect_into(dir: &Path, recursive: bool, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            if recursive {
+                let _ = collect_into(&path, recursive, out);
+            }
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_default();
+        // skip already-optimized outputs
+        let stem_lc = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_default();
+        if stem_lc.ends_with(".optimized") {
+            continue;
+        }
+        if IMAGE_EXTS.iter().any(|e| e == &ext.as_str()) {
+            out.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn print_hook_script() {
