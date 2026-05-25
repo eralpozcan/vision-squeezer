@@ -5,6 +5,10 @@ node_modules
 .claude/
 *.optimized.*
 
+# Release build outputs (downloaded artifacts + renamed binaries)
+/artifacts/
+/dist/
+
 # Python build artifacts
 python/dist/
 python/build/

@@ -7,6 +7,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.2] - 2026-05-25
+
+### Fixed
+- **Release pipeline: `cargo publish` no longer trips on the dirty working tree** — when the three publish jobs were collapsed into one runner in 0.3.1, the `download-artifact` step left `artifacts/` and `dist/` as untracked files in the checkout. `cargo publish` refuses to run against a dirty git tree, so the crates.io step failed and the subsequent `npm publish` step never ran (both registries stayed pinned at 0.3.0 even though the GitHub Release for v0.3.1 was created). Reordered the steps so `cargo publish` runs first against a clean tree, then artifacts are downloaded for the GitHub Release + npm publish. Also added `/artifacts/` and `/dist/` to `.gitignore` as belt-and-suspenders in case the step order is ever shuffled.
+
+### Note
+- crates.io and npm have a 0.3.1 gap; both go from 0.3.0 → 0.3.2. The GitHub Release for v0.3.1 (binaries only) remains. No functional changes between 0.3.1 and 0.3.2 — this is purely a release-pipeline fix.
+
+---
+
 ## [0.3.1] - 2026-05-25
 
 ### Changed
