@@ -93,9 +93,13 @@ jobs:
       - name: Publish to crates.io (skip if version exists)
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        # `--locked` forbids cargo from regenerating Cargo.lock during
+        # publish (which would dirty the working tree and trip the
+        # built-in cleanliness check). The lockfile must be committed
+        # in sync with Cargo.toml — bump both in every version commit.
         run: |
           set +e
-          OUTPUT=$(cargo publish 2>&1)
+          OUTPUT=$(cargo publish --locked 2>&1)
           STATUS=$?
           echo "$OUTPUT"
           if [ $STATUS -ne 0 ] && echo "$OUTPUT" | grep -q "already exists"; then
