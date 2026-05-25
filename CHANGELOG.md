@@ -7,6 +7,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.1] - 2026-05-25
+
+### Changed
+- **`release.yml` collapsed three jobs into one** — `release`, `publish-crates`, and `publish-npm` previously ran on three separate runners. Each step is sub-minute work, so two of those runners were paying the ~30s boot cost for nothing. They're now sequential steps in a single `publish` job (saves ~1 minute of wall-clock per tag and avoids the multi-runner artifact-download dance).
+- **`python.yml` no longer auto-builds on tags** — PyPI publishing is still commented out in this file, so every tag was producing five sets of wheels that nothing consumed. Switched the trigger to `workflow_dispatch` only; re-enable the tag trigger once PyPI publishing is wired up.
+
+---
+
 ## [0.3.0] - 2026-05-25
 
 ### Fixed
