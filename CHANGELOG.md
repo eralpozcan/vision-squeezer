@@ -7,6 +7,24 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.4] - 2026-05-25
+
+### Changed
+- **Plugin marketplace consolidated to a single plugin.** Previously the marketplace listed four separate plugins: `vision-squeezer-mcp` for the MCP server and three standalone plugins (`vision-doctor`, `vision-upgrade`, `vision-stats`) for the skills. End users had to run four `/plugin install` commands to get the full experience, and most stopped after the first — they then saw stale skill output (the marketplace cache was fresh, but the un-installed skills were shadowed by older user-level copies). The four plugin entries are now collapsed into one `vision-squeezer-mcp` plugin that bundles the MCP server **and** all three skills. `/plugin install vision-squeezer-mcp@vision-squeezer` is now the complete install.
+- The three skill directories moved from `skills/<name>/` (repo root) to `plugins/vision-squeezer-mcp/skills/<name>/` so they ship inside the plugin's source directory.
+
+### Breaking
+- Users who previously installed any of `vision-doctor@vision-squeezer`, `vision-upgrade@vision-squeezer`, or `vision-stats@vision-squeezer` as standalone plugins will see them disappear from the marketplace after `/plugin marketplace update vision-squeezer`. The same skills are now reachable by installing (or updating) `vision-squeezer-mcp@vision-squeezer`. Cleanup:
+  ```
+  /plugin remove vision-doctor@vision-squeezer
+  /plugin remove vision-upgrade@vision-squeezer
+  /plugin remove vision-stats@vision-squeezer
+  /plugin update vision-squeezer-mcp@vision-squeezer
+  ```
+- Older user-level skill copies at `~/.claude/skills/vision-{doctor,upgrade,stats}/` will shadow the bundled versions. Delete them after upgrading: `rm -rf ~/.claude/skills/vision-doctor ~/.claude/skills/vision-upgrade ~/.claude/skills/vision-stats`.
+
+---
+
 ## [0.3.3] - 2026-05-25
 
 ### Fixed
