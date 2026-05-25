@@ -11,6 +11,13 @@
 
 const { spawnSync } = require('child_process');
 const readline = require('readline');
+const path = require('path');
+
+// Pinning to an exact version in the MCP command line busts the npx cache on
+// every upgrade. Without it, `npx -y vision-squeezer` silently reuses an old
+// cached tarball even after `npm install -g vision-squeezer@latest` — users
+// then see "MCP failed to connect" with a stale binary they can't update.
+const PKG_VERSION = require(path.join(__dirname, '..', 'package.json')).version;
 
 const SCOPES = [
   {
@@ -84,8 +91,9 @@ Methods (Claude Code only):
             /plugin install vision-squeezer-mcp@vision-squeezer
             Bundles MCP server + stats/doctor/upgrade skills.
 
-  mcp-add   claude mcp add [--scope X] vision-squeezer -- npx -y vision-squeezer
-            Server only, no skills bundled.
+  mcp-add   claude mcp add [--scope X] vision-squeezer -- npx -y vision-squeezer@<version>
+            Server only, no skills bundled. The version is pinned to the
+            installer's package version so the npx cache busts on upgrade.
 
 Scopes (mcp-add):
   user      All projects on this machine (recommended)
@@ -124,13 +132,13 @@ function commandExists(cmd) {
 }
 
 function buildArgs(client, scope) {
-  // All three CLIs accept the same shape: `<cli> mcp add [--scope X] NAME -- npx -y vision-squeezer`
+  // All three CLIs accept the same shape: `<cli> mcp add [--scope X] NAME -- npx -y vision-squeezer@<version>`
   // `local` is the Claude Code default — omit the flag to keep behavior identical to docs.
   const args = ['mcp', 'add'];
   if (scope.key !== 'local') {
     args.push('--scope', scope.key);
   }
-  args.push('vision-squeezer', '--', 'npx', '-y', 'vision-squeezer');
+  args.push('vision-squeezer', '--', 'npx', '-y', `vision-squeezer@${PKG_VERSION}`);
   return args;
 }
 

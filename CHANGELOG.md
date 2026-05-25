@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.3] - 2026-05-25
+
+### Fixed
+- **npm tarball trimmed from 29 MB → 16 kB.** The consolidated `publish` job in 0.3.2 downloaded GitHub Release artifacts into `artifacts/` and `dist/` before invoking `npm publish`, so npm packed the platform binaries (and a stale bundled macOS binary) into the npm tarball. `.gitignore` is not always honored by npm pack — add an explicit `files` allowlist in `package.json` listing only `bin/install.js`, `bin/run.js`, and `postinstall.js`. The runtime binary is still downloaded by `postinstall.js` from the GitHub Release on install.
+- **`vision-squeezer install` now pins the MCP version.** Old: `claude mcp add vision-squeezer -- npx -y vision-squeezer`. New: `claude mcp add vision-squeezer -- npx -y vision-squeezer@<PKG_VERSION>`. Without the `@version` suffix, npm's `~/.npm/_npx` cache freezes users on whatever tarball was first resolved — multiple "MCP failed to connect" reports trace back to this. The pinned version busts the cache on every upgrade.
+
+### Changed
+- **`vision-upgrade` skill rewritten for self-healing recovery.** Now flushes `~/.npm/_npx`, re-registers the MCP with the latest pinned version, and runs a real `initialize` probe against the registered command. `--force` mode wipes the cache and re-registers across all scopes. Replaces the previous version which falsely claimed npx users were "always on latest" (true before pinning, no longer true after).
+- **`vision-doctor` skill rewritten for accurate, actionable diagnostics.** Distinguishes `cargo` / `npm-global` / `npx-pinned` / `npx-unpinned` install modes, parses the pinned version out of the MCP registration, and **actively probes** the registered command via a JSON-RPC `initialize` request (portable `python3` timeout — macOS has no GNU `timeout`). Failures surface the captured stderr verbatim and end with a one-line fix: `vision-upgrade` or `vision-upgrade --force`.
+- **`CLAUDE.md`** restructured: behavioral guidelines (Think Before Coding / Simplicity / Surgical Changes / Goal-Driven Execution) up top, project context (commands, architecture, release invariants, installer contract) below.
+
+---
+
 ## [0.3.2] - 2026-05-25
 
 ### Fixed
