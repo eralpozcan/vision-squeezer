@@ -68,15 +68,27 @@ jobs:
           # wastes storage quota — 7 days is well past any retry window.
           retention-days: 7
 
-  release:
-    name: Publish Release
+  # GitHub Release + crates.io + npm in a single runner. Each individual
+  # publish step is well under a minute; running them in one job saves the
+  # ~30s × 2 runner spin-ups vs the old three-job split, and lets npm's
+  # postinstall safely find the freshly-attached GH release binaries
+  # (npm publish only happens after `gh release` attaches assets).
+  publish:
+    name: Publish (GitHub Release + crates.io + npm)
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -108,15 +120,7 @@ jobs:
           files: dist/vision-squeezer-mcp-*
           body: ${{ steps.changelog.outputs.body }}
 
-  publish-crates:
-    name: Publish to crates.io
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Publish (skip if already exists)
+      - name: Publish to crates.io (skip if version exists)
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
@@ -130,19 +134,7 @@ jobs:
           fi
           exit $STATUS
 
-  publish-npm:
-    name: Publish to npm
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4.2.2
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Publish
+      - name: Publish to npm
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

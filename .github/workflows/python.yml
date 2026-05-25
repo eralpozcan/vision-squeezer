@@ -1,10 +1,10 @@
 name: Python wheels
 
 on:
-  push:
-    tags: ["v*"]
-  # Hand-trigger only — wheels do not need to rebuild on every push to main.
-  # Use the Actions UI's "Run workflow" button to invoke manually.
+  # Manual trigger only. PyPI publish is still commented out below (see the
+  # "PyPI publish — disabled by default" block), so auto-building wheels on
+  # every tag burned ~5 runner jobs producing artifacts that were discarded.
+  # When PyPI publishing is enabled, re-add `push: tags: ["v*"]` here.
   workflow_dispatch:
 
 # Cancel queued/running wheel jobs if a newer tag supersedes them.
