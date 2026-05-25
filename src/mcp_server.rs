@@ -8,7 +8,8 @@ use vision_squeezer::{OutputFormat, ProcessConfig, ProcessMode, VisionModel, opt
 
 #[derive(Deserialize)]
 struct Request {
-    id: Value,
+    #[serde(default)]
+    id: Option<Value>,
     method: String,
     #[serde(default)]
     params: Value,
@@ -339,10 +340,13 @@ fn handle_optimize_image(id: Value, args: Value) -> Response {
     }
 }
 
-fn handle(req: Request) -> Response {
-    match req.method.as_str() {
+fn handle(req: Request) -> Option<Response> {
+    // JSON-RPC notifications (no `id` field) must not receive a response.
+    let id = req.id?;
+
+    let resp = match req.method.as_str() {
         "initialize" => Response::ok(
-            req.id,
+            id,
             json!({
                 "protocolVersion": "2024-11-05",
                 "capabilities": { "tools": {} },
@@ -350,9 +354,7 @@ fn handle(req: Request) -> Response {
             }),
         ),
 
-        "notifications/initialized" => Response::ok(req.id, json!({})),
-
-        "tools/list" => Response::ok(req.id, tools_list()),
+        "tools/list" => Response::ok(id, tools_list()),
 
         "tools/call" => {
             let tool_name = req
@@ -362,15 +364,16 @@ fn handle(req: Request) -> Response {
                 .unwrap_or("");
             let args = req.params.get("arguments").cloned().unwrap_or(json!({}));
             match tool_name {
-                "optimize_image" => handle_optimize_image(req.id, args),
-                "get_savings_stats" => handle_get_stats(req.id),
-                "sandbox_execute" => handle_sandbox_execute(req.id, args),
-                _ => Response::err(req.id, -32601, format!("Tool not found: {}", tool_name)),
+                "optimize_image" => handle_optimize_image(id, args),
+                "get_savings_stats" => handle_get_stats(id),
+                "sandbox_execute" => handle_sandbox_execute(id, args),
+                _ => Response::err(id, -32601, format!("Tool not found: {}", tool_name)),
             }
         }
 
-        _ => Response::err(req.id, -32601, format!("method not found: {}", req.method)),
-    }
+        _ => Response::err(id, -32601, format!("method not found: {}", req.method)),
+    };
+    Some(resp)
 }
 
 // ── Main loop (stdio JSON-RPC) ────────────────────────────────────────────────
@@ -437,10 +440,23 @@ fn main() {
 
         let response = match serde_json::from_str::<Request>(&line) {
             Ok(req) => handle(req),
-            Err(e) => Response::err(json!(null), -32700, format!("parse error: {e}")),
+            Err(e) => {
+                // If the message can't even be parsed as a Request, fall back to
+                // inspecting it as raw JSON: notifications (no `id`) get no reply.
+                match serde_json::from_str::<Value>(&line) {
+                    Ok(v) if v.get("id").is_none() => None,
+                    _ => Some(Response::err(
+                        json!(null),
+                        -32700,
+                        format!("parse error: {e}"),
+                    )),
+                }
+            }
         };
 
-        if let Ok(json) = serde_json::to_string(&response) {
+        if let Some(response) = response
+            && let Ok(json) = serde_json::to_string(&response)
+        {
             writeln!(out, "{json}").ok();
             out.flush().ok();
         }

@@ -3,7 +3,14 @@ name: Python wheels
 on:
   push:
     tags: ["v*"]
+  # Hand-trigger only — wheels do not need to rebuild on every push to main.
+  # Use the Actions UI's "Run workflow" button to invoke manually.
   workflow_dispatch:
+
+# Cancel queued/running wheel jobs if a newer tag supersedes them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   linux:
@@ -20,19 +27,22 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --manifest-path python/Cargo.toml --interpreter 3.8 3.9 3.10 3.11 3.12 3.13
+          # Python 3.8 + 3.9 dropped: both are EOL and rarely used in modern
+          # vision stacks. Trims the per-platform wheel count from 6 → 4.
+          args: --release --out dist --manifest-path python/Cargo.toml --interpreter 3.10 3.11 3.12 3.13
           sccache: "true"
           manylinux: 2_28
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}
           path: dist
+          retention-days: 14
 
   macos:
     runs-on: macos-latest
-    strategy:
-      matrix:
-        target: [aarch64, x86_64]
+    # Intel macOS dropped: macos-latest is arm64 only since 2024 (Intel runs
+    # would be billed at 10× and Apple has EOL'd Intel Macs). Users on Intel
+    # Macs can install via Rosetta or `pip install --no-binary`.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,19 +51,17 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.target }}
+          target: aarch64
           args: --release --out dist --manifest-path python/Cargo.toml
           sccache: "true"
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-${{ matrix.target }}
+          name: wheels-macos-aarch64
           path: dist
+          retention-days: 14
 
   windows:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        target: [x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -62,13 +70,14 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.target }}
+          target: x64
           args: --release --out dist --manifest-path python/Cargo.toml
           sccache: "true"
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows-${{ matrix.target }}
+          name: wheels-windows-x64
           path: dist
+          retention-days: 14
 
   sdist:
     runs-on: ubuntu-latest
@@ -83,6 +92,7 @@ jobs:
         with:
           name: wheels-sdist
           path: dist
+          retention-days: 14
 
   # ─────────────────────────────────────────────────────────────────────────
   # PyPI publish — disabled by default. To enable:

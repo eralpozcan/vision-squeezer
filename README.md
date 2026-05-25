@@ -19,10 +19,46 @@ Works with **any agent or editor** that speaks MCP — Claude, GPT, Gemini, Code
 
 ## Install
 
-### Claude Code (one-liner)
+### Interactive (recommended)
+
+Picks the client, method, and scope for you:
 
 ```bash
+npx vision-squeezer install
+```
+
+Prompts for:
+- Target CLI — Claude Code / Codex CLI / Qwen Code
+- Install method (Claude Code only) — `plugin` (bundles MCP + stats/doctor/upgrade skills) or `mcp-add` (server only)
+- Install scope (`mcp-add` only) — `user` (all projects, recommended), `local` (this project only), `project` (share via `.mcp.json`)
+
+Scripted setups pass the choices directly:
+
+```bash
+npx vision-squeezer install --client claude --method plugin --yes
+npx vision-squeezer install --client claude --method mcp-add --scope user --yes
+```
+
+### Claude Code — plugin marketplace (one-liner, bundles skills)
+
+```
+/plugin marketplace add eralpozcan/vision-squeezer
+/plugin install vision-squeezer-mcp@vision-squeezer
+```
+
+Installs the MCP server *and* `/vision-stats`, `/vision-doctor`, `/vision-upgrade` skills as a single Claude Code plugin. Restart open Claude Code sessions for the MCP server to attach.
+
+### Claude Code — `mcp add` (server only)
+
+```bash
+# All projects on this machine (recommended)
+claude mcp add --scope user vision-squeezer -- npx -y vision-squeezer
+
+# This project only (Claude Code's default)
 claude mcp add vision-squeezer -- npx -y vision-squeezer
+
+# Share with the team via .mcp.json in the repo
+claude mcp add --scope project vision-squeezer -- npx -y vision-squeezer
 ```
 
 ### Claude Desktop

@@ -4,6 +4,14 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 
+// `npx vision-squeezer install [...]` → run the interactive installer instead
+// of launching the MCP server. The installer prompts for client + scope and
+// calls `claude mcp add` (or codex/qwen equivalents) on the user's behalf.
+if (process.argv[2] === 'install') {
+  require('./install.js');
+  return;
+}
+
 const ext = process.platform === 'win32' ? '.exe' : '';
 const bin = path.join(__dirname, `vision-squeezer-mcp${ext}`);
 

@@ -7,6 +7,25 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.0] - 2026-05-25
+
+### Fixed
+- **MCP: notifications no longer get a response** — `notifications/initialized` (and any other JSON-RPC notification) is now correctly handled as a notification per the spec. Previously the server required an `id` field on every request, which caused notifications to fail parsing and emit a spurious `parse error` reply. Some clients interpreted that as a protocol failure, leading to ~30s connect timeouts on cold start.
+
+### Added
+- **`npx vision-squeezer install`** — interactive installer that prompts for the target CLI (Claude Code / Codex / Qwen), install method (`plugin` / `mcp-add`), and install scope (`user` / `local` / `project`), then runs the matching command. Use `--client` / `--method` / `--scope` / `--yes` flags for non-interactive setups.
+- **`vision-squeezer-mcp` Claude Code plugin** — bundles the MCP server config so users can install everything in one shot via `/plugin install vision-squeezer-mcp@vision-squeezer`. No manual `claude mcp add` required. Lives under `plugins/vision-squeezer-mcp/` and is listed in `.claude-plugin/marketplace.json`.
+
+### Changed
+- **README install section** — leads with the plugin marketplace one-liner; documents the three `mcp add` scopes (`user`, `local`, `project`) explicitly instead of defaulting silently to `local`.
+- **Plugin marketplace versions** synced to crate/npm version (0.1.9 → 0.3.0).
+- **CI cost reductions** —
+  - `ci.yml` merged `test` + `lint` into a single `check` job (saves one runner spin-up per push), added `paths-ignore` for docs/markdown changes, and added `concurrency.cancel-in-progress` so superseded PR pushes are killed.
+  - `release.yml` and `python.yml` got the same `concurrency` block to cancel re-tagged builds. Artifact retention dropped from the 90-day default to 7–14 days.
+  - `python.yml` trimmed Python interpreters from `3.8..3.13` to `3.10..3.13` (3.8/3.9 are EOL) and dropped the Intel-macOS target (`macos-latest` is arm64 only — Intel would be billed at 10× the Linux rate).
+
+---
+
 ## [0.2.2] - 2026-05-24
 
 ### Fixed

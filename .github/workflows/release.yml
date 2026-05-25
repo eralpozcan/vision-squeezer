@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
 
+# A tag is immutable, so a re-tag should cancel any in-flight build for the
+# same ref instead of running both to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -57,6 +63,10 @@ jobs:
           name: ${{ matrix.asset }}
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
           if-no-files-found: error
+          # Artifacts are only needed long enough for the `release` job to pull
+          # them and attach to the GitHub Release. The default 90-day retention
+          # wastes storage quota — 7 days is well past any retry window.
+          retention-days: 7
 
   release:
     name: Publish Release
