@@ -73,12 +73,17 @@ CMD=$(echo "$MCP_LINE" | sed -E 's/^[^:]+:[[:space:]]*//' | sed -E 's/[[:space:]
 [ -z "$CMD" ] && CMD="npx -y vision-squeezer@${LATEST}"
 
 # Use python3 for a portable 8s timeout (macOS lacks GNU `timeout`).
-PROBE_OUT=$(python3 - "$CMD" <<'PY' 2>&1
+# cwd=$HOME because npx checks the cwd's package.json — if the user happens to
+# be inside the vision-squeezer project dir (name collision), npx skips the
+# install and the probe false-negatives with "command not found". Running from
+# $HOME guarantees a neutral resolution context.
+PROBE_OUT=$(python3 - "$CMD" "$HOME" <<'PY' 2>&1
 import subprocess, sys, json
 cmd = sys.argv[1]
+home = sys.argv[2]
 req = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"vision-doctor","version":"1"}}}\n'
 try:
-    r = subprocess.run(cmd, shell=True, input=req, capture_output=True, text=True, timeout=8)
+    r = subprocess.run(cmd, shell=True, input=req, capture_output=True, text=True, timeout=8, cwd=home)
     if r.stdout:
         print(r.stdout.splitlines()[0])
     if r.stderr:

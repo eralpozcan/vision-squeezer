@@ -117,12 +117,16 @@ Probe the registered command — give it 5s to print a JSON-RPC ready signal on 
 
 ```bash
 # Portable 8s probe — macOS lacks GNU `timeout`, so use python3.
-PROBE=$(python3 - "$LATEST" <<'PY' 2>&1
+# cwd=$HOME because npx checks the cwd's package.json — if the user happens to
+# be inside the vision-squeezer project dir (name collision), npx skips the
+# install and the probe false-negatives with "command not found".
+PROBE=$(python3 - "$LATEST" "$HOME" <<'PY' 2>&1
 import subprocess, sys
 ver = sys.argv[1]
+home = sys.argv[2]
 req = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"vision-upgrade","version":"1"}}}\n'
 try:
-    r = subprocess.run(['npx', '-y', f'vision-squeezer@{ver}'], input=req, capture_output=True, text=True, timeout=8)
+    r = subprocess.run(['npx', '-y', f'vision-squeezer@{ver}'], input=req, capture_output=True, text=True, timeout=8, cwd=home)
     if r.stdout:
         print(r.stdout.splitlines()[0])
     if r.stderr:

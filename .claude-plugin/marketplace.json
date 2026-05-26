@@ -13,7 +13,7 @@
       "name": "vision-squeezer-mcp",
       "source": "./plugins/vision-squeezer-mcp",
       "description": "VisionSqueezer for Claude Code — MCP server (optimize_image / sandbox_execute / get_savings_stats) bundled with the vision-doctor, vision-upgrade, and vision-stats skills. One install brings everything.",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "author": {
         "name": "Eralp Özcan",
         "url": "https://github.com/eralpozcan"

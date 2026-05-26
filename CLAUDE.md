@@ -112,13 +112,22 @@ The Claude Code plugin marketplace (`.claude-plugin/marketplace.json`) bundles f
 
 - **Bump `Cargo.lock` in lockstep with `Cargo.toml`.** Cargo writes the workspace crate's own version into `Cargo.lock`; if the two drift, `cargo publish` regenerates the lockfile mid-run, dirties the working tree, and aborts. The release workflow uses `cargo publish --locked` to catch this at CI build time.
 - **Job order matters in `release.yml`.** `cargo publish` runs **before** `download-artifact` so the tree stays clean — downloaded artifacts otherwise leave `artifacts/` and `dist/` as untracked files and trip the dirty-tree check.
-- **All version-bearing manifests must be bumped together:** `Cargo.toml`, `Cargo.lock`, `package.json`, `.claude-plugin/plugin.json`, `plugins/vision-squeezer-mcp/.claude-plugin/plugin.json`, and the four `version` entries in `.claude-plugin/marketplace.json`.
+- **All version-bearing manifests must be bumped together** on every release:
+  - `Cargo.toml` and `Cargo.lock`
+  - `package.json`
+  - `.claude-plugin/plugin.json`
+  - `.claude-plugin/marketplace.json` (single `version` entry — the marketplace was consolidated to one plugin in v0.3.4)
+  - `plugins/vision-squeezer-mcp/.claude-plugin/plugin.json`
+  - `plugins/vision-squeezer-mcp/.mcp.json` — the `args` array must read `["-y", "vision-squeezer@<NEW_VERSION>"]`. Leaving this unpinned means every `/plugin install` user freezes on whatever npx cached first (same root cause as the v0.3.0–0.3.4 "MCP failed to connect" reports). Verify with `grep -c "vision-squeezer@" plugins/vision-squeezer-mcp/.mcp.json` — must return 1.
 
 ### Installer + MCP Registration
 
 - `bin/install.js` registers the MCP via `npx -y vision-squeezer@<PINNED_VERSION>` — the explicit `@X.Y.Z` is **load-bearing**. Without it, `npx`'s cache in `~/.npm/_npx` freezes users on whatever tarball was first resolved, even after `npm install -g vision-squeezer@latest` bumps the global. Past "MCP failed to connect" reports trace back to this cache.
+- `plugins/vision-squeezer-mcp/.mcp.json` is the equivalent for the plugin-marketplace path (`/plugin install vision-squeezer-mcp@vision-squeezer`). It must be pinned the same way — see the release invariant above.
 - The `vision-upgrade` skill flushes `~/.npm/_npx` and re-registers with the new pinned version on every upgrade.
 - The `vision-doctor` skill must actively probe the registered MCP command (spawn it, send `initialize`, read the response). Registration without a successful probe is a broken install.
+- **Probes must run with `cwd=$HOME`.** When the python subprocess uses the default cwd and the user is inside the vision-squeezer project dir (whose `package.json` is also `name: vision-squeezer`), npx detects the local package, skips install, and the probe false-negatives with `sh: vision-squeezer: command not found`. Always pass `cwd=os.path.expanduser('~')`.
+- **Never edit `postinstall.js` to inline SKILL.md content.** Pre-v0.3.5 versions hardcoded inline strings that silently rotted and overwrote any fresh content shipped via the plugin marketplace. The current `postinstall.js` reads SKILL.md from the bundled `plugins/vision-squeezer-mcp/skills/` directory and copies to `~/.claude/skills/` — single source of truth on disk.
 
 ### Notes
 

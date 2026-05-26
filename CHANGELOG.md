@@ -7,6 +7,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.5] - 2026-05-26
+
+### Fixed
+- **`postinstall.js` no longer overwrites skills with stale inline content.** Pre-0.3.5 versions hardcoded the SKILL.md text as JS string literals inside `installSkills()`, so every `npm install` / `npx -y vision-squeezer` clobbered `~/.claude/skills/vision-*/SKILL.md` with the v0.3.0-era wording — including the false "Status: ✅ Using npx — always latest, no action needed" line that masked broken installs across the entire 0.3.x debugging session. The function now reads from the bundled `plugins/vision-squeezer-mcp/skills/<name>/SKILL.md` files shipped in the npm tarball, so both install paths (npm + Claude Code plugin marketplace) share one on-disk source of truth.
+- **`plugins/vision-squeezer-mcp/.mcp.json` is now version-pinned.** The plugin marketplace registration was `npx -y vision-squeezer` (unpinned), so users who installed via `/plugin install vision-squeezer-mcp@vision-squeezer` got the same npx cache-freeze bug the installer was already protecting against on its own path. Now reads `["-y", "vision-squeezer@<VERSION>"]`. The release invariants in `CLAUDE.md` require this file to be bumped in lockstep with `package.json`.
+- **`vision-doctor` + `vision-upgrade` MCP probes now run with `cwd=$HOME`.** When the probe ran from the user's current shell cwd and the user happened to be inside the `vision-squeezer` project directory (whose `package.json` is `name: vision-squeezer`), `npx` detected the local package, skipped the install step, and the probe false-negatived with `sh: vision-squeezer: command not found`. Pinning the subprocess cwd to `$HOME` guarantees a neutral resolution context.
+
+### Changed
+- **`CLAUDE.md` release invariants expanded** to document the `.mcp.json` pinning rule (with a `grep` invariant for verification), the probe-cwd requirement, and the prohibition on inline SKILL.md content in `postinstall.js`. These all come from concrete bugs hit in 0.3.0–0.3.4.
+
+---
+
 ## [0.3.4] - 2026-05-25
 
 ### Changed
