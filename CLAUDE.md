@@ -119,6 +119,7 @@ The Claude Code plugin marketplace (`.claude-plugin/marketplace.json`) bundles f
   - `.claude-plugin/marketplace.json` (single `version` entry — the marketplace was consolidated to one plugin in v0.3.4)
   - `plugins/vision-squeezer-mcp/.claude-plugin/plugin.json`
   - `plugins/vision-squeezer-mcp/.mcp.json` — the `args` array must read `["-y", "vision-squeezer@<NEW_VERSION>"]`. Leaving this unpinned means every `/plugin install` user freezes on whatever npx cached first (same root cause as the v0.3.0–0.3.4 "MCP failed to connect" reports). Verify with `grep -c "vision-squeezer@" plugins/vision-squeezer-mcp/.mcp.json` — must return 1.
+  - `server.json` — the MCP registry manifest (registry.modelcontextprotocol.io). Bump **both** the root `version` and `packages[0].version` (npm package version, must match `package.json`). Not published by `release.yml` (submitted manually via `mcp-publisher`), so it is easy to forget — it sat stale at `0.1.1` through 0.3.x. Keep the `description` provider list in sync too.
 
 ### Installer + MCP Registration
 
