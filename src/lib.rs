@@ -114,6 +114,13 @@ pub enum VisionModel {
     Gpt5,
     /// Gemini 2.0/3.0: flat 258 tokens if ≤ 384x384, else 258 per 768x768 tile.
     Gemini15,
+    /// Meta Llama 3.2/3.3 Vision (Mllama): 560×560 tiles, aspect-ratio canvas capped at 4 tiles.
+    /// (Llama 4 uses a different native-multimodal vision encoder and is not modeled by this arm.)
+    LlamaVision,
+    /// Alibaba Qwen2-VL / Qwen2.5-VL: 28px effective grid (14px ViT patch × 2×2 merge), token clamp.
+    QwenVl,
+    /// DeepSeek-VL2: 384×384 base + dynamic 384 local tiles (open-weights; value is local-context savings).
+    DeepseekVl,
 }
 
 #[derive(Debug)]
@@ -177,6 +184,63 @@ pub fn estimate_tokens(width: u32, height: u32, model: VisionModel) -> TokenEsti
                 }
             }
         }
+        VisionModel::LlamaVision => {
+            // Meta Llama 3.2 / 3.3 Vision (Mllama): aspect-ratio canvas of 560×560 tiles, capped at
+            // max_num_tiles = 4. No separate global-thumbnail tile — the canvas is the full
+            // representation. 14px ViT patch → 40×40 = 1600 patches + 1 CLS = 1601 tokens per tile.
+            // Source: transformers MllamaVisionConfig (image_size 560, patch_size 14, max_num_tiles 4).
+            let (w, h) = fit_within(width, height, 1120); // 2×2 max canvas (4 tiles)
+            let tiles = (tile_count(w, 560) * tile_count(h, 560)).clamp(1, 4);
+            TokenEstimate {
+                model,
+                tiles,
+                tokens: tiles * 1601,
+            }
+        }
+        VisionModel::QwenVl => {
+            // Alibaba Qwen2-VL / Qwen2.5-VL: 28px effective grid (image_patch_size 14 × spatial_merge 2).
+            // smart_resize rounds each side to a multiple of 28 and bounds total tokens to
+            // [IMAGE_MIN_TOKEN_NUM, IMAGE_MAX_TOKEN_NUM] = [4, 16384] (qwen_vl_utils defaults).
+            // tokens = (W/28)·(H/28). DashScope endpoints may cap lower via a per-request max_pixels.
+            let (w, h) = fit_within_pixels(width, height, u32::MAX, 16_384 * 28 * 28);
+            let patches = tile_count(w, 28) * tile_count(h, 28);
+            TokenEstimate {
+                model,
+                tiles: patches,
+                tokens: patches.clamp(4, 16_384),
+            }
+        }
+        VisionModel::DeepseekVl => {
+            // DeepSeek-VL2 (open weights — deepseek public API is text-only, so the win is local
+            // inference context, not API billing). SigLIP-SO400M-patch14-384 emits 27×27 patches per
+            // tile; a 2×2 pixel-shuffle compresses that to 14×14 = 196 tokens (h = 14). Token layout:
+            //   global thumbnail = 14·(14+1) = 210  (one <tile_newline> per row)
+            //   + 1 <view_separator>
+            //   local tiles      = (nh·14)·(nw·14 + 1) over the anyres canvas (m·384, n·384), m·n ≤ 9
+            // Sources: DeepSeek-VL2 paper §2 (arXiv:2412.10302) + processing_deepseek_vl_v2.py.
+            const H: u32 = 14;
+            let (nw, nh) = if width <= 384 && height <= 384 {
+                (1, 1)
+            } else {
+                let mut nw = tile_count(width, 384).max(1);
+                let mut nh = tile_count(height, 384).max(1);
+                while nw * nh > 9 {
+                    if nw >= nh {
+                        nw -= 1;
+                    } else {
+                        nh -= 1;
+                    }
+                }
+                (nw, nh)
+            };
+            let global = H * (H + 1) + 1; // global view + separator
+            let local = (nh * H) * (nw * H + 1);
+            TokenEstimate {
+                model,
+                tiles: nw * nh + 1, // local tiles + global view
+                tokens: global + local,
+            }
+        }
     }
 }
 
@@ -233,6 +297,26 @@ pub fn optimal_send_dimensions(width: u32, height: u32, model: VisionModel) -> (
                 (width, height)
             } else {
                 optimal_for_prescaling_model(width, height, 4096, 768)
+            }
+        }
+        VisionModel::LlamaVision => {
+            // Snap to the 560px tile grid within the 2×2 (1120px) max canvas to avoid spill-over tiles.
+            optimal_for_prescaling_model(width, height, 1120, 560)
+        }
+        VisionModel::QwenVl => {
+            // Snap each side to the 28px patch grid, after fitting under the max-pixel budget.
+            let (fw, fh) = fit_within_pixels(width, height, u32::MAX, 16_384 * 28 * 28);
+            (
+                snap_to_tile_boundary(fw, 28).max(28),
+                snap_to_tile_boundary(fh, 28).max(28),
+            )
+        }
+        VisionModel::DeepseekVl => {
+            // ≤384 stays as a single tile; otherwise snap to the 384px tile grid.
+            if width <= 384 && height <= 384 {
+                (width, height)
+            } else {
+                optimal_for_prescaling_model(width, height, 1152, 384)
             }
         }
     }

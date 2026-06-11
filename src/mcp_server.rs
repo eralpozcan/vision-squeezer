@@ -112,7 +112,7 @@ fn tools_list() -> Value {
                         },
                         "target_model": {
                             "type": "string",
-                            "enum": ["claude", "gpt4o", "gpt5", "gemini"],
+                            "enum": ["claude", "gpt4o", "gpt5", "gemini", "llama", "qwen", "deepseek"],
                             "description": "Target model family for specialized dimension snapping."
                         }
                     }
@@ -281,6 +281,9 @@ fn handle_optimize_image(id: Value, args: Value) -> Response {
             "gpt4o" | "gpt-4o" => VisionModel::Gpt4o,
             "gpt5" | "gpt-5" => VisionModel::Gpt5,
             "gemini" => VisionModel::Gemini15,
+            "llama" | "llama-vision" => VisionModel::LlamaVision,
+            "qwen" | "qwen-vl" => VisionModel::QwenVl,
+            "deepseek" | "deepseek-vl" => VisionModel::DeepseekVl,
             _ => VisionModel::Claude,
         };
         cfg_builder = cfg_builder.target_model(model);
@@ -295,6 +298,9 @@ fn handle_optimize_image(id: Value, args: Value) -> Response {
                 Some(VisionModel::Gpt4o) => "GPT-4o",
                 Some(VisionModel::Gpt5) => "GPT-5",
                 Some(VisionModel::Gemini15) => "Gemini",
+                Some(VisionModel::LlamaVision) => "Llama Vision",
+                Some(VisionModel::QwenVl) => "Qwen-VL",
+                Some(VisionModel::DeepseekVl) => "DeepSeek-VL",
                 None => "Agnostic",
             };
 

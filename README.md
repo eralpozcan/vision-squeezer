@@ -249,7 +249,7 @@ vision-squeezer path/to/image.jpg \
   --smart-crop \                  # edge-energy crop (vs corner-tolerance)
   --auto-quality 0.95 \           # binary-search quality to hit SSIM target
   --bg-tolerance 25 \             # background detection 0-255 (default: 15)
-  --model claude|gpt4o|gpt5|gemini \ # model-aware resizing
+  --model claude|gpt4o|gpt5|gemini|llama|qwen|deepseek \ # model-aware resizing
   --max-tiles 20 \                # hard cap on tile count
   --json \                        # machine-readable JSON output
   --dry-run                       # run pipeline, skip disk write
@@ -283,6 +283,20 @@ OpenAI scales your image to fit inside a 2048px box, then rescales it again so t
 ### 3. Gemini 2.0 / 3.0 (Massive Tiles)
 Gemini uses a massive **768×768 tile** system (if the image is > 384px). Each tile is a flat 258 tokens.
 * **The Fix:** An 800×600 image will trigger a 2×1 tile grid (1,032 tokens). `vision-squeezer` snaps it down slightly to fit exactly inside a 768×768 box, dropping the cost to 258 tokens (**%75 savings**).
+
+### 4. Llama 3.2 / 3.3 Vision (560px Tiles)
+Meta's Mllama vision tiles images on a **560×560** grid, capped at 4 tiles (~1601 tokens each).
+* **The Fix:** A 2400×1670 screenshot trimmed to 2400×1200 drops from a 2×2 to a 2×1 canvas: **6,404 → 3,202 tokens (−50%)**. (Llama 4 uses a different vision encoder and is not modeled.)
+
+### 5. Qwen2-VL / 2.5-VL / 3-VL (28px Patch Grid)
+Alibaba's Qwen-VL uses a **28px effective grid** (14px patch × 2×2 merge); `tokens = (W/28)·(H/28)` bounded to `[4, 16384]`.
+* **The Fix:** The patch is small, so area is the lever — a 1024×1024 image with its border stripped to 896×896 drops **1,369 → 1,024 tokens (−25%)**.
+
+### 6. DeepSeek-VL2 (384px Anyres Tiles)
+SigLIP-384 + 2× pixel-shuffle gives 196 tokens/tile on a `(m·384, n·384)` canvas (`m·n ≤ 9`).
+* **The Fix:** An 800×768 image snapped to 768×768 drops from 3×2 to 2×2 tiles: **1,415 → 1,023 tokens (−28%)**. (Open weights — the win is local-inference context, not API billing.)
+
+> Full provider math, exact formulas, and cited sources: **[visionsqueezer.com/providers](https://visionsqueezer.com/providers/claude)**
 
 </details>
 

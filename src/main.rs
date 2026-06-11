@@ -153,6 +153,9 @@ fn main() {
                     Some("gpt4o") | Some("gpt-4o") => Some(VisionModel::Gpt4o),
                     Some("gpt5") | Some("gpt-5") | Some("gpt5.5") => Some(VisionModel::Gpt5),
                     Some("gemini") => Some(VisionModel::Gemini15),
+                    Some("llama") | Some("llama-vision") => Some(VisionModel::LlamaVision),
+                    Some("qwen") | Some("qwen-vl") => Some(VisionModel::QwenVl),
+                    Some("deepseek") | Some("deepseek-vl") => Some(VisionModel::DeepseekVl),
                     _ => Some(VisionModel::Claude),
                 };
                 if let Some(model) = m {
@@ -299,6 +302,9 @@ fn run_one(path: &Path, opts: &RunOpts) -> Option<FileOutcome> {
         Some(VisionModel::Gpt4o) => "GPT-4o",
         Some(VisionModel::Gpt5) => "GPT-5",
         Some(VisionModel::Gemini15) => "Gemini",
+        Some(VisionModel::LlamaVision) => "Llama Vision",
+        Some(VisionModel::QwenVl) => "Qwen-VL",
+        Some(VisionModel::DeepseekVl) => "DeepSeek-VL",
         None => "Agnostic",
     };
 

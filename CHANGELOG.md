@@ -7,6 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.4.0] - 2026-06-11
+
+### Added
+- **Three new provider targets for token estimation and dimension snapping:** `llama`, `qwen`, `deepseek` (CLI `--model`, MCP `target_model`).
+  - **Llama 3.2 / 3.3 Vision (Mllama)** — 560×560 tiles, aspect-ratio canvas capped at 4 tiles, ~1601 tokens/tile. Source: `transformers` `MllamaVisionConfig`. (Llama 4's native-multimodal vision encoder is a different scheme and is not modeled.)
+  - **Qwen2-VL / 2.5-VL / 3-VL** — 28px effective grid (14px patch × 2×2 merge), `tokens = (W/28)·(H/28)` bounded to `[4, 16384]`. Source: `qwen_vl_utils.smart_resize`.
+  - **DeepSeek-VL2** — SigLIP-SO400M-384 + 2× pixel-shuffle (14×14 = 196 tokens/tile), anyres `(m·384, n·384)` canvas with `m·n ≤ 9`; exact token layout `210 (global) + 1 (separator) + (nh·14)·(nw·14 + 1)`. Source: DeepSeek-VL2 paper §2 (arXiv:2412.10302, 13 Dec 2024) + reference processor. Open-weights; the win is local-inference context, not API billing.
+- **Documentation site rebuilt** on Nuxt UI + Nuxt Content (multi-page, auto sitemap / llms.txt / OG images). New per-provider pages with exact formulas, cited primary sources, verification dates, and proportional savings tables.
+
+### Notes
+- Formula constants were verified against primary sources (model configs, reference tokenizer code, technical reports) on 2026-06-11. Hosted-API per-tile billing can differ from a model's own token footprint — treat absolute numbers as indicative and the tile/patch counts as authoritative.
+
+---
+
 ## [0.3.5] - 2026-05-26
 
 ### Fixed
