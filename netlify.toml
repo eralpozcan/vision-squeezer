@@ -1,6 +1,6 @@
 [build]
   base    = "docs"
-  publish = ".output/public"
+  publish = "dist"
   command = "pnpm install && pnpm generate"
 
 [build.environment]
