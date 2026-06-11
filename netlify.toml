@@ -1,7 +1,11 @@
 [build]
   base    = "docs"
-  publish = "."
-  command = ""
+  publish = ".output/public"
+  command = "pnpm install && pnpm generate"
+
+[build.environment]
+  PNPM_VERSION = "11.5.2"
+  NODE_OPTIONS = "--max-old-space-size=8192"
 
 [[headers]]
   for = "/*"
