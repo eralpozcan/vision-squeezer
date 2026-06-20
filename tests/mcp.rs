@@ -136,7 +136,13 @@ fn mcp_optimize_image_batch_processes_each_entry() {
     let results = inner["results"].as_array().expect("results array");
     assert_eq!(results.len(), 2);
     assert_eq!(results[0]["ok"], serde_json::json!(true));
-    assert!(results[0]["result"]["optimized_base64"].as_str().unwrap().len() > 0);
+    assert!(
+        results[0]["result"]["optimized_base64"]
+            .as_str()
+            .unwrap()
+            .len()
+            > 0
+    );
     assert_eq!(results[1]["ok"], serde_json::json!(false));
     assert!(results[1]["error"].is_string());
 
