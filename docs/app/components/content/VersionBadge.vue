@@ -1,16 +1,23 @@
 <script setup lang="ts">
 const props = defineProps<{ fallback?: string }>()
-const version = ref(props.fallback || 'v0.3.5')
+const fallback = computed(() => props.fallback || 'v0.5.0')
 
-onMounted(async () => {
-  try {
-    const res = await fetch('https://api.github.com/repos/eralpozcan/vision-squeezer/releases/latest')
-    const data = await res.json()
-    if (data?.tag_name) version.value = data.tag_name
-  } catch {
-    // keep fallback
-  }
-})
+// Resolved during SSR/prerender so the real tag is baked into the HTML —
+// no post-hydration fetch, no stale-version flash.
+const { data: version } = await useAsyncData(
+  'latest-release',
+  async () => {
+    try {
+      const data = await $fetch<{ tag_name?: string }>(
+        'https://api.github.com/repos/eralpozcan/vision-squeezer/releases/latest'
+      )
+      return data?.tag_name || fallback.value
+    } catch {
+      return fallback.value
+    }
+  },
+  { default: () => fallback.value }
+)
 </script>
 
 <template>
