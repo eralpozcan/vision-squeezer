@@ -1,6 +1,6 @@
 [package]
 name = "vision-squeezer-py"
-version = "0.2.1"
+version = "0.6.0"
 edition = "2021"
 description = "Python bindings for vision-squeezer — LLM-native image optimization"
 license = "Elastic-2.0"

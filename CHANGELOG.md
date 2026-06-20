@@ -7,6 +7,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.0] - 2026-06-21
+
+### Added
+- **PyPI distribution.** The Python bindings (`pip install vision-squeezer`) now publish to PyPI on every `v*` tag via `python.yml`, using GitHub Trusted Publishing (OIDC) — no API token. Wheels for linux x86_64/aarch64, macOS arm64, Windows x64, plus an sdist.
+
+### Changed
+- **MCP registry publish is now automated.** `release.yml` submits `server.json` to registry.modelcontextprotocol.io via `mcp-publisher` + GitHub OIDC, replacing the manual step that previously left the manifest stale.
+
 ## [0.5.0] - 2026-06-20
 
 ### Added

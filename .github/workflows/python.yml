@@ -1,10 +1,8 @@
 name: Python wheels
 
 on:
-  # Manual trigger only. PyPI publish is still commented out below (see the
-  # "PyPI publish — disabled by default" block), so auto-building wheels on
-  # every tag burned ~5 runner jobs producing artifacts that were discarded.
-  # When PyPI publishing is enabled, re-add `push: tags: ["v*"]` here.
+  push:
+    tags: ["v*"]
   workflow_dispatch:
 
 # Cancel queued/running wheel jobs if a newer tag supersedes them.
@@ -94,38 +92,32 @@ jobs:
           path: dist
           retention-days: 14
 
-  # ─────────────────────────────────────────────────────────────────────────
-  # PyPI publish — disabled by default. To enable:
-  #   1. Create a PyPI account: https://pypi.org/account/register/
-  #   2. Reserve the project name "vision-squeezer" on PyPI (push a first
-  #      manual release, or contact PyPI support if the name is taken).
-  #   3. Add a Trusted Publisher (no API token needed):
-  #      https://pypi.org/manage/account/publishing/
-  #      Owner: eralpozcan
-  #      Repo:  vision-squeezer
-  #      Workflow filename: python.yml
-  #      Environment name: pypi
-  #   4. Create a GitHub environment named "pypi" with no protection rules.
-  #   5. Uncomment the job below.
-  #
-  # release:
-  #   name: Publish to PyPI
-  #   runs-on: ubuntu-latest
-  #   if: startsWith(github.ref, 'refs/tags/v')
-  #   needs: [linux, macos, windows, sdist]
-  #   environment:
-  #     name: pypi
-  #     url: https://pypi.org/p/vision-squeezer
-  #   permissions:
-  #     id-token: write
-  #   steps:
-  #     - uses: actions/download-artifact@v4
-  #       with:
-  #         pattern: wheels-*
-  #         merge-multiple: true
-  #         path: dist
-  #     - name: Publish
-  #       uses: PyO3/maturin-action@v1
-  #       with:
-  #         command: upload
-  #         args: --skip-existing dist/*
+  # PyPI publish via Trusted Publishing (OIDC) — no API token/secret. The
+  # `id-token: write` permission lets pypa/gh-action-pypi-publish mint the
+  # short-lived token PyPI exchanges against the registered trusted publisher.
+  # Requires (one-time, in the PyPI + GitHub UIs):
+  #   - PyPI trusted publisher for project "vision-squeezer": owner eralpozcan,
+  #     repo vision-squeezer, workflow python.yml, environment pypi.
+  #   - GitHub environment named "pypi".
+  # Runs on a v* tag or a manual dispatch. The first successful upload creates
+  # the project on PyPI and flips the pending publisher to active.
+  release:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, windows, sdist]
+    environment:
+      name: pypi
+      url: https://pypi.org/p/vision-squeezer
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
