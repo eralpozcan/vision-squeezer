@@ -84,6 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write # OIDC token for mcp-publisher (io.github.* namespace auth)
     steps:
       - uses: actions/checkout@v4
 
@@ -147,4 +148,14 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # MCP registry (registry.modelcontextprotocol.io) listing. Auth is GitHub
+      # OIDC — the `io.github.eralpozcan/*` namespace is proven by this repo's
+      # id-token, so no secret is needed. Replaces the old manual mcp-publisher
+      # step that left server.json stale at 0.1.1 through 0.3.x.
+      - name: Publish to MCP Registry
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_linux_amd64.tar.gz" | tar -xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
 
