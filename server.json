@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.eralpozcan/vision-squeezer",
-  "description": "Cut vision API token costs by snapping images to tile boundaries. Claude, GPT-4o, GPT-5, Gemini, Llama Vision, Qwen-VL, DeepSeek-VL.",
+  "description": "Cut vision-LLM token costs by snapping images to tile boundaries — Claude, GPT, Gemini, Llama, Qwen",
   "repository": {
     "url": "https://github.com/eralpozcan/vision-squeezer",
     "source": "github"

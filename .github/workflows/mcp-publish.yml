@@ -1,0 +1,27 @@
+name: MCP Registry
+
+# Publishes server.json to registry.modelcontextprotocol.io via mcp-publisher.
+# Auth is GitHub OIDC — the io.github.eralpozcan/* namespace is proven by this
+# repo's id-token, so no secret is needed. Kept separate from release.yml so a
+# registry-only publish (or a re-run after a server.json fix) never has to
+# re-run crates.io / npm, which reject an already-published version.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish to MCP Registry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_linux_amd64.tar.gz" | tar -xz mcp-publisher
+      - name: Login (GitHub OIDC) and publish
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
