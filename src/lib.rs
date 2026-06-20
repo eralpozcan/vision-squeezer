@@ -924,14 +924,37 @@ fn otsu_threshold(img: &image::GrayImage) -> u8 {
 
 // ── Base64 I/O ────────────────────────────────────────────────────────────────
 
+/// Reject decode work that would blow up memory: an attacker-supplied base64
+/// string can be tiny yet declare enormous dimensions (decompression bomb).
+const MAX_B64_LEN: usize = 64 * 1024 * 1024; // ~48 MB of raw image bytes
+const MAX_PIXELS: u64 = 100_000_000; // 100 MP
+const MAX_DIM: u32 = 16_384;
+
 pub fn decode_base64_image(input: &str) -> Result<DynamicImage, String> {
     let data = if let Some(c) = input.find(',') {
         &input[c + 1..]
     } else {
         input
     };
-    let bytes = B64.decode(data.trim()).map_err(|e| e.to_string())?;
-    image::load_from_memory(&bytes).map_err(|e| e.to_string())
+    let data = data.trim();
+    if data.len() > MAX_B64_LEN {
+        return Err(format!(
+            "image base64 exceeds {} MB limit",
+            MAX_B64_LEN / 1_048_576
+        ));
+    }
+    let bytes = B64.decode(data).map_err(|e| e.to_string())?;
+
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_DIM);
+    limits.max_image_height = Some(MAX_DIM);
+    limits.max_alloc = Some(MAX_PIXELS * 4); // RGBA worst case
+
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?;
+    reader.limits(limits);
+    reader.decode().map_err(|e| e.to_string())
 }
 
 pub fn encode_image_base64(img: &DynamicImage, cfg: &ProcessConfig) -> Result<String, String> {
@@ -1085,6 +1108,31 @@ mod tests {
 
     fn cfg() -> ProcessConfig {
         ProcessConfig::default()
+    }
+
+    #[test]
+    fn decode_round_trips_small_image() {
+        let img = DynamicImage::ImageRgb8(ImageBuffer::from_fn(8, 8, |_, _| {
+            image::Rgb([10u8, 20, 30])
+        }));
+        let b64 = encode_image_base64(&img, &cfg()).unwrap();
+        let decoded = decode_base64_image(&b64).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (8, 8));
+    }
+
+    #[test]
+    fn decode_rejects_oversized_dimensions() {
+        // Valid, tiny-on-disk image whose width exceeds MAX_DIM — the decompression-bomb shape.
+        let wide = DynamicImage::ImageRgb8(ImageBuffer::from_fn(MAX_DIM + 1, 1, |_, _| {
+            image::Rgb([0u8, 0, 0])
+        }));
+        let b64 = encode_image_base64(&wide, &cfg()).unwrap();
+        assert!(decode_base64_image(&b64).is_err());
+    }
+
+    #[test]
+    fn decode_rejects_garbage() {
+        assert!(decode_base64_image("not valid base64 !!!").is_err());
     }
 
     #[test]

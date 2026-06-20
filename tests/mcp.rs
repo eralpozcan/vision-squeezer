@@ -39,6 +39,7 @@ fn mcp_tools_list_includes_optimize_image() {
     let tools = v["result"]["tools"].as_array().expect("tools array");
     let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
     assert!(names.contains(&"optimize_image"));
+    assert!(names.contains(&"optimize_image_batch"));
     assert!(names.contains(&"get_savings_stats"));
     assert!(names.contains(&"sandbox_execute"));
 
@@ -86,6 +87,58 @@ fn mcp_optimize_image_returns_base64_and_report() {
     assert!(inner["optimized_base64"].as_str().unwrap().len() > 0);
     assert!(inner["savings_report"]["tiles_before"].is_u64());
     assert!(inner["savings_report"]["tiles_after"].is_u64());
+
+    let _ = child.kill();
+}
+
+#[test]
+fn mcp_optimize_image_batch_processes_each_entry() {
+    let mut child = Command::cargo_bin("vision-squeezer-mcp")
+        .unwrap()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn mcp");
+
+    let stdin = child.stdin.as_mut().unwrap();
+    let good = make_image_base64(1025, 1025);
+
+    let req = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/call",
+        "params": {
+            "name": "optimize_image_batch",
+            "arguments": {
+                "images": [
+                    { "image_base64": good, "target_model": "claude" },
+                    { "image_base64": "!!!not base64!!!" }
+                ]
+            }
+        }
+    });
+    writeln!(stdin, "{}", req).unwrap();
+    stdin.flush().unwrap();
+
+    let stdout = child.stdout.take().unwrap();
+    let mut reader = BufReader::new(stdout);
+    let mut line = String::new();
+    reader.read_line(&mut line).unwrap();
+
+    let v: serde_json::Value = serde_json::from_str(&line).expect("json parse");
+    assert_eq!(v["id"], serde_json::json!(7));
+    // The batch itself succeeds even though one image is invalid.
+    assert!(v["error"].is_null());
+    let content = &v["result"]["content"][0]["text"];
+    let inner: serde_json::Value =
+        serde_json::from_str(content.as_str().unwrap()).expect("inner json");
+    let results = inner["results"].as_array().expect("results array");
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0]["ok"], serde_json::json!(true));
+    assert!(results[0]["result"]["optimized_base64"].as_str().unwrap().len() > 0);
+    assert_eq!(results[1]["ok"], serde_json::json!(false));
+    assert!(results[1]["error"].is_string());
 
     let _ = child.kill();
 }

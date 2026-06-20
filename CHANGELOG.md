@@ -7,6 +7,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.0] - 2026-06-20
+
+### Added
+- **`optimize_image_batch` MCP tool** — optimize up to 64 images in a single tool call. Each entry takes the same arguments as `optimize_image`; the response is a per-image `results` array. A failing image yields an `{ "ok": false, "error": ... }` entry without aborting the batch. Eliminates per-image round-trips when an agent processes galleries or document sets.
+
+### Security
+- **Bounded image decode (decompression-bomb / OOM guard).** `decode_base64_image` now caps base64 input length and decodes through `image::Limits` (max 16384px per dimension, 100 MP, RGBA allocation ceiling). A crafted, tiny-on-disk image declaring enormous dimensions can no longer exhaust memory on the MCP server. Covers both `optimize_image` and `sandbox_execute`, which share this decode path. (OWASP A03/A05.)
+
 ## [0.4.0] - 2026-06-11
 
 ### Added

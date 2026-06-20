@@ -119,6 +119,36 @@ fn tools_list() -> Value {
                 }
             },
             {
+                "name": "optimize_image_batch",
+                "description": "Optimize multiple images in one call (max 64). Each entry takes the same arguments as optimize_image. Returns a per-image results array; a failing image yields an error entry without failing the whole batch.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["images"],
+                    "properties": {
+                        "images": {
+                            "type": "array",
+                            "maxItems": 64,
+                            "description": "Array of optimize_image argument objects.",
+                            "items": {
+                                "type": "object",
+                                "required": ["image_base64"],
+                                "properties": {
+                                    "image_base64": { "type": "string", "description": "Base64-encoded image (JPEG/PNG/WebP). Data-URL prefix accepted." },
+                                    "mode": { "type": "string", "enum": ["standard", "ocr", "auto"], "default": "auto" },
+                                    "output_format": { "type": "string", "enum": ["jpeg", "webp", "avif"], "default": "jpeg" },
+                                    "quality": { "type": "integer", "minimum": 1, "maximum": 100, "default": 75 },
+                                    "tile_size": { "type": "integer", "default": 512 },
+                                    "crop": { "type": "boolean", "default": true },
+                                    "bg_tolerance": { "type": "integer", "minimum": 0, "maximum": 255, "default": 15 },
+                                    "max_tiles": { "type": "integer", "minimum": 1 },
+                                    "target_model": { "type": "string", "enum": ["claude", "gpt4o", "gpt5", "gemini", "llama", "qwen", "deepseek"] }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 "name": "get_savings_stats",
                 "description": "Retrieve cumulative token and bandwidth savings achieved through VisionSqueezer optimizations.",
                 "inputSchema": {
@@ -233,9 +263,50 @@ fn handle_get_stats(id: Value) -> Response {
 }
 
 fn handle_optimize_image(id: Value, args: Value) -> Response {
+    match optimize_one(&args) {
+        Ok(v) => Response::ok(
+            id,
+            json!({ "content": [{ "type": "text", "text": serde_json::to_string(&v).unwrap() }] }),
+        ),
+        Err(e) => Response::err(id, -32000, e),
+    }
+}
+
+fn handle_optimize_image_batch(id: Value, args: Value) -> Response {
+    let images = match args.get("images").and_then(|v| v.as_array()) {
+        Some(a) => a,
+        None => return Response::err(id, -32602, "missing images array"),
+    };
+    const MAX_BATCH: usize = 64; // ponytail: hard cap, raise if real workloads need it
+    if images.len() > MAX_BATCH {
+        return Response::err(id, -32602, format!("batch exceeds {MAX_BATCH} images"));
+    }
+    // One bad image returns an error entry; the batch as a whole still succeeds.
+    let results: Vec<Value> = images
+        .iter()
+        .enumerate()
+        .map(|(idx, item)| match optimize_one(item) {
+            Ok(v) => json!({ "index": idx, "ok": true, "result": v }),
+            Err(e) => json!({ "index": idx, "ok": false, "error": e }),
+        })
+        .collect();
+    Response::ok(
+        id,
+        json!({ "content": [{
+            "type": "text",
+            "text": serde_json::to_string(&json!({ "results": results })).unwrap()
+        }] }),
+    )
+}
+
+/// Optimize a single image from an arguments object (same shape as the
+/// `optimize_image` tool input). Returns the savings-report JSON, not an
+/// RPC envelope, so both the single and batch handlers can reuse it.
+// ponytail: batch loops this sequentially — parallelize only if latency is measured as a problem.
+fn optimize_one(args: &Value) -> Result<Value, String> {
     let b64 = match args.get("image_base64").and_then(|v| v.as_str()) {
         Some(s) => s,
-        None => return Response::err(id, -32602, "missing image_base64"),
+        None => return Err("missing image_base64".to_string()),
     };
     let mode = match args.get("mode").and_then(|v| v.as_str()).unwrap_or("auto") {
         "ocr" => ProcessMode::Ocr,
@@ -319,30 +390,22 @@ fn handle_optimize_image(id: Value, args: Value) -> Response {
                 &format!("{:?}", mode),
             );
 
-            Response::ok(
-                id,
-                json!({
-                    "content": [{
-                        "type": "text",
-                        "text": serde_json::to_string(&json!({
-                            "optimized_base64": r.optimized_base64,
-                            "savings_report": {
-                                "tiles_before": r.report.tiles_before,
-                                "tiles_after": r.report.tiles_after,
-                                "tiles_saved": r.report.tiles_saved,
-                                "token_reduction_pct": format!(
-                                    "{:.1}",
-                                    r.report.tiles_saved as f64 / r.report.tiles_before as f64 * 100.0
-                                ),
-                                "size_reduction_pct": r.report.size_reduction_pct()
-                                    .map(|p| format!("{:.1}", p))
-                            }
-                        })).unwrap()
-                    }]
-                }),
-            )
+            Ok(json!({
+                "optimized_base64": r.optimized_base64,
+                "savings_report": {
+                    "tiles_before": r.report.tiles_before,
+                    "tiles_after": r.report.tiles_after,
+                    "tiles_saved": r.report.tiles_saved,
+                    "token_reduction_pct": format!(
+                        "{:.1}",
+                        r.report.tiles_saved as f64 / r.report.tiles_before as f64 * 100.0
+                    ),
+                    "size_reduction_pct": r.report.size_reduction_pct()
+                        .map(|p| format!("{:.1}", p))
+                }
+            }))
         }
-        Err(e) => Response::err(id, -32000, e),
+        Err(e) => Err(e),
     }
 }
 
@@ -371,6 +434,7 @@ fn handle(req: Request) -> Option<Response> {
             let args = req.params.get("arguments").cloned().unwrap_or(json!({}));
             match tool_name {
                 "optimize_image" => handle_optimize_image(id, args),
+                "optimize_image_batch" => handle_optimize_image_batch(id, args),
                 "get_savings_stats" => handle_get_stats(id),
                 "sandbox_execute" => handle_sandbox_execute(id, args),
                 _ => Response::err(id, -32601, format!("Tool not found: {}", tool_name)),
