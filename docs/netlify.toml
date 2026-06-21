@@ -1,0 +1,9 @@
+[build]
+  command = "pnpm build"
+  publish = "dist"
+
+# Nuxt/Nitro Netlify preset: SSR server functions + SWR route caching.
+# Required so '/' (routeRules swr) is served by a function, not a stale static file.
+[build.environment]
+  NITRO_PRESET = "netlify"
+  NODE_OPTIONS = "--max-old-space-size=4096"

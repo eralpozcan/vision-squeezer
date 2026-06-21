@@ -49,6 +49,10 @@ export default defineNuxtConfig({
     }
   },
 
+  routeRules: {
+    '/': { swr: 3600, prerender: false }
+  },
+
   experimental: {
     asyncContext: true
   },
@@ -57,8 +61,12 @@ export default defineNuxtConfig({
 
   nitro: {
     prerender: {
+      // Seed the crawl from a content page, not '/'. The homepage is served
+      // SWR (see routeRules) so its VersionBadge re-fetches the latest release
+      // at request time instead of freezing on the build-time tag. The sidebar
+      // nav on every content page cross-links the rest, so one seed is enough.
       routes: [
-        '/'
+        '/getting-started'
       ],
       crawlLinks: true,
       autoSubfolderIndex: false

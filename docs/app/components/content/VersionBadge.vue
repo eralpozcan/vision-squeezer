@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const props = defineProps<{ fallback?: string }>()
-const fallback = computed(() => props.fallback || 'v0.5.0')
+const fallback = computed(() => props.fallback || 'v0.6.0')
 
 // Resolved during SSR/prerender so the real tag is baked into the HTML —
 // no post-hydration fetch, no stale-version flash.
