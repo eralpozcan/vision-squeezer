@@ -28,7 +28,7 @@ npx vision-squeezer install
 ```
 
 Prompts for:
-- Target CLI — Claude Code / Codex CLI / Qwen Code
+- Target CLI — Claude Code / Codex CLI / Qwen Code / OpenCode / Gemini CLI / Kimi CLI
 - Install method (Claude Code only) — `plugin` (bundles MCP + stats/doctor/upgrade skills) or `mcp-add` (server only)
 - Install scope (`mcp-add` only) — `user` (all projects, recommended), `local` (this project only), `project` (share via `.mcp.json`)
 
@@ -142,7 +142,11 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 ### Gemini CLI
 
-Add to `~/.gemini/settings.json`:
+```bash
+gemini mcp add --scope user vision-squeezer -- npx -y vision-squeezer
+```
+
+Or add to `~/.gemini/settings.json` (user) / `.gemini/settings.json` (project):
 ```json
 {
   "mcpServers": {
@@ -171,6 +175,27 @@ args = ["-y", "vision-squeezer"]
 
 ```bash
 qwen mcp add vision-squeezer -- npx -y vision-squeezer
+```
+
+### OpenCode
+
+`opencode mcp add` is interactive-only, so add directly to `~/.config/opencode/opencode.json` (global) or `opencode.json` in the repo root (project):
+```json
+{
+  "mcp": {
+    "vision-squeezer": {
+      "type": "local",
+      "command": ["npx", "-y", "vision-squeezer"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### Kimi CLI
+
+```bash
+kimi mcp add vision-squeezer -- npx -y vision-squeezer
 ```
 
 ### Zed

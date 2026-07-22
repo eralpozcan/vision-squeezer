@@ -12,6 +12,8 @@
 const { spawnSync } = require('child_process');
 const readline = require('readline');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 // Pinning to an exact version in the MCP command line busts the npx cache on
 // every upgrade. Without it, `npx -y vision-squeezer` silently reuses an old
@@ -41,9 +43,14 @@ const CLIENTS = [
   { key: 'claude', label: 'Claude Code', cli: 'claude' },
   { key: 'codex', label: 'Codex CLI', cli: 'codex' },
   { key: 'qwen', label: 'Qwen Code', cli: 'qwen' },
+  { key: 'opencode', label: 'OpenCode', cli: 'opencode' },
+  { key: 'gemini', label: 'Gemini CLI', cli: 'gemini' },
+  { key: 'kimi', label: 'Kimi CLI', cli: 'kimi' },
 ];
 
-// Install methods available for Claude Code only. Other CLIs go straight to `mcp add`.
+// Install methods available for Claude Code only. Codex/Qwen go straight to
+// `mcp add`. OpenCode has no non-interactive `mcp add` — it only reads
+// config files — so it gets its own OPENCODE_METHOD below instead.
 const METHODS = [
   {
     key: 'plugin',
@@ -56,6 +63,10 @@ const METHODS = [
     description: 'Register only the MCP server (no bundled skills) using `claude mcp add`',
   },
 ];
+
+// OpenCode's CLI (`opencode mcp add`) is interactive-only with no flags to
+// pass name/command non-interactively, so we write its JSON config directly.
+const OPENCODE_METHOD = { key: 'config-file', label: 'OpenCode config file' };
 
 const MARKETPLACE_REPO = 'eralpozcan/vision-squeezer';
 const PLUGIN_NAME = 'vision-squeezer-mcp';
@@ -80,7 +91,7 @@ Usage:
   npx vision-squeezer install [options]
 
 Options:
-  -c, --client <name>   Target CLI (claude | codex | qwen)
+  -c, --client <name>   Target CLI (claude | codex | qwen | opencode | gemini | kimi)
   -m, --method <name>   Install method for Claude Code (plugin | mcp-add)
   -s, --scope <name>    Install scope for 'mcp-add' (user | local | project)
   -y, --yes             Skip confirmation prompt
@@ -99,6 +110,22 @@ Scopes (mcp-add):
   user      All projects on this machine (recommended)
   local     This project only, private to you (default for Claude Code)
   project   Shared via .mcp.json checked into the repo
+
+OpenCode:
+  \`opencode mcp add\` is interactive-only (no flags), so this installer
+  writes the MCP entry directly into OpenCode's JSON config instead:
+    user      ~/.config/opencode/opencode.json (global)
+    project   ./opencode.json (repo root)
+  OpenCode has no 'local' scope.
+
+Gemini CLI:
+  gemini mcp add --scope X vision-squeezer -- npx -y vision-squeezer@<version>
+  Scope writes to ~/.gemini/settings.json (user) or .gemini/settings.json
+  (project). Gemini CLI has no 'local' scope.
+
+Kimi CLI:
+  kimi mcp add vision-squeezer -- npx -y vision-squeezer@<version>
+  Always writes the single global ~/.kimi/mcp.json — no scope flag exists.
 `);
 }
 
@@ -132,10 +159,11 @@ function commandExists(cmd) {
 }
 
 function buildArgs(client, scope) {
-  // All three CLIs accept the same shape: `<cli> mcp add [--scope X] NAME -- npx -y vision-squeezer@<version>`
+  // claude/codex/qwen/gemini accept the same shape: `<cli> mcp add [--scope X] NAME -- npx -y vision-squeezer@<version>`
   // `local` is the Claude Code default — omit the flag to keep behavior identical to docs.
+  // Kimi CLI has no scope concept (single global ~/.kimi/mcp.json) — never pass --scope.
   const args = ['mcp', 'add'];
-  if (scope.key !== 'local') {
+  if (client.key !== 'kimi' && scope.key !== 'local') {
     args.push('--scope', scope.key);
   }
   args.push('vision-squeezer', '--', 'npx', '-y', `vision-squeezer@${PKG_VERSION}`);
@@ -168,6 +196,10 @@ async function main() {
       return 1;
     }
   }
+  if (client && (client.key === 'opencode' || client.key === 'gemini') && scope && scope.key === 'local') {
+    console.error(`${client.label} has no 'local' scope. Use 'user' or 'project'.`);
+    return 1;
+  }
 
   let method;
   if (opts.method) {
@@ -189,6 +221,7 @@ async function main() {
   };
   const needsScopePrompt = () => {
     if (method && method.key === 'plugin') return false;
+    if (client && client.key === 'kimi') return false; // single global config, no scope
     return !scope;
   };
 
@@ -208,16 +241,26 @@ async function main() {
 
     if (client.key === 'claude') {
       if (!method) method = await pickFromList(rl, 'Pick install method', METHODS, 'plugin');
+    } else if (client.key === 'opencode') {
+      // `opencode mcp add` is interactive-only, no non-interactive shape to target.
+      method = OPENCODE_METHOD;
+    } else if (client.key === 'kimi') {
+      // No --scope flag exists; kimi mcp add always writes ~/.kimi/mcp.json.
+      method = METHODS.find((m) => m.key === 'mcp-add');
+      if (!scope) scope = { key: 'user', label: 'user' };
     } else {
-      // codex / qwen have no plugin marketplace concept
+      // codex / qwen / gemini have no plugin marketplace concept
       method = METHODS.find((m) => m.key === 'mcp-add');
     }
 
-    if (method.key === 'mcp-add' && !scope) {
-      scope = await pickFromList(rl, 'Pick install scope', SCOPES, 'user');
+    if ((method.key === 'mcp-add' || method.key === 'config-file') && !scope) {
+      const scopeList = (client.key === 'opencode' || client.key === 'gemini')
+        ? SCOPES.filter((s) => s.key !== 'local')
+        : SCOPES;
+      scope = await pickFromList(rl, 'Pick install scope', scopeList, 'user');
     }
 
-    if (!commandExists(client.cli)) {
+    if (!commandExists(client.cli) && method.key !== 'config-file') {
       console.error(`\n'${client.cli}' CLI not found in PATH.`);
       const flags = method.key === 'plugin'
         ? `--client ${client.key} --method plugin`
@@ -228,6 +271,10 @@ async function main() {
 
     if (method.key === 'plugin') {
       return await runPluginInstall(rl, opts.yes);
+    }
+
+    if (method.key === 'config-file') {
+      return await runOpencodeInstall(rl, scope, opts.yes);
     }
 
     const args = buildArgs(client, scope);
@@ -255,6 +302,44 @@ async function main() {
   } finally {
     if (rl && !rl.closed) rl.close();
   }
+}
+
+function opencodeConfigPath(scope) {
+  return scope.key === 'user'
+    ? path.join(os.homedir(), '.config', 'opencode', 'opencode.json')
+    : path.join(process.cwd(), 'opencode.json');
+}
+
+async function runOpencodeInstall(rl, scope, yes) {
+  const configPath = opencodeConfigPath(scope);
+  console.log(`\nWill write MCP entry to: ${configPath}`);
+
+  if (rl && !yes) {
+    const confirm = await prompt(rl, 'Proceed? [Y/n]: ');
+    if (confirm && !/^y(es)?$/i.test(confirm)) {
+      console.log('Cancelled.');
+      return 0;
+    }
+  }
+  if (rl) rl.close();
+
+  let config = {};
+  if (fs.existsSync(configPath)) {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } else {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    config.$schema = 'https://opencode.ai/config.json';
+  }
+  config.mcp = config.mcp || {};
+  config.mcp['vision-squeezer'] = {
+    type: 'local',
+    command: ['npx', '-y', `vision-squeezer@${PKG_VERSION}`],
+    enabled: true,
+  };
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+
+  console.log(`\nDone. VisionSqueezer registered with OpenCode (scope: ${scope.key}) at ${configPath}.`);
+  return 0;
 }
 
 async function runPluginInstall(rl, yes) {

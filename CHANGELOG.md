@@ -7,6 +7,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.1] - 2026-07-21
+
+### Added
+- **OpenCode, Gemini CLI, and Kimi CLI installer support.** `npx vision-squeezer install --client <opencode|gemini|kimi>` now covers three more MCP clients:
+  - **OpenCode** — `opencode mcp add` is interactive-only (no flags), so the installer writes the MCP entry directly into `opencode.json` (global `~/.config/opencode/opencode.json` or project-root). No `local` scope.
+  - **Gemini CLI** — `gemini mcp add --scope X vision-squeezer -- npx -y vision-squeezer@<version>`. No `local` scope (`user`/`project` only, writes `settings.json`).
+  - **Kimi CLI** — `kimi mcp add vision-squeezer -- npx -y vision-squeezer@<version>`. No scope flag at all — always writes the single global `~/.kimi/mcp.json`.
+
 ## [0.6.0] - 2026-06-21
 
 ### Added

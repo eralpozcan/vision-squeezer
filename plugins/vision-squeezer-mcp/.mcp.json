@@ -2,7 +2,7 @@
   "mcpServers": {
     "vision-squeezer": {
       "command": "npx",
-      "args": ["-y", "vision-squeezer@0.6.0"]
+      "args": ["-y", "vision-squeezer@0.6.1"]
     }
   }
 }
