@@ -1,4 +1,13 @@
+// tools_list() is one large json! literal; the default macro recursion limit (128) is too small for it.
+#![recursion_limit = "256"]
+
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io::{self, BufRead, Write};
+use std::path::{Path, PathBuf};
+
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as B64;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -63,14 +72,17 @@ fn tools_list() -> Value {
         "tools": [
             {
                 "name": "optimize_image",
-                "description": "Resize and optimize an image for LLM vision APIs. Snaps dimensions to tile boundaries, removes padding, and re-encodes to minimize token consumption.",
+                "description": "Resize and optimize an image for LLM vision APIs, fitting it to a token budget (default 1600). Removes padding, snaps dimensions to the model grid and re-encodes. Returns the optimized image plus a short JSON report; with image_path the copy is also written to output_path. To save tokens, look at the returned image instead of the original.",
                 "inputSchema": {
                     "type": "object",
-                    "required": ["image_base64"],
                     "properties": {
+                        "image_path": {
+                            "type": "string",
+                            "description": "Path to a local image file (JPEG/PNG/WebP/GIF). Preferred: the file is read locally and the optimized copy is returned as an image plus written to a temp file (see output_path). Use this or image_base64."
+                        },
                         "image_base64": {
                             "type": "string",
-                            "description": "Base64-encoded image (JPEG/PNG/WebP). Data-URL prefix accepted."
+                            "description": "Base64-encoded image (JPEG/PNG/WebP). Data-URL prefix accepted. Use this or image_path."
                         },
                         "mode": {
                             "type": "string",
@@ -140,8 +152,8 @@ fn tools_list() -> Value {
                             "description": "Array of optimize_image argument objects.",
                             "items": {
                                 "type": "object",
-                                "required": ["image_base64"],
                                 "properties": {
+                                    "image_path": { "type": "string", "description": "Path to a local image file." },
                                     "image_base64": { "type": "string", "description": "Base64-encoded image (JPEG/PNG/WebP). Data-URL prefix accepted." },
                                     "mode": { "type": "string", "enum": ["standard", "ocr", "auto"], "default": "auto" },
                                     "output_format": { "type": "string", "enum": ["jpeg", "webp", "avif"], "default": "jpeg" },
@@ -150,6 +162,7 @@ fn tools_list() -> Value {
                                     "crop": { "type": "boolean", "default": true },
                                     "bg_tolerance": { "type": "integer", "minimum": 0, "maximum": 255, "default": 15 },
                                     "max_tiles": { "type": "integer", "minimum": 1 },
+                                    "max_tokens": { "type": "integer", "minimum": 0, "default": 1600 },
                                     "target_model": { "type": "string", "enum": ["claude", "claude-standard", "gpt6", "gpt4o", "gpt5", "gemini", "llama", "qwen", "deepseek", "deepseek-local", "kimi", "glm", "pixtral", "gemma", "internvl", "minicpm", "molmo", "aya", "phi4", "granite", "llava", "falcon", "minimax", "step", "ling", "voyage"] }
                                 }
                             }
@@ -271,11 +284,18 @@ fn handle_get_stats(id: Value) -> Response {
     }
 }
 
+fn image_block(o: &Optimized) -> Value {
+    json!({ "type": "image", "data": o.base64, "mimeType": o.mime })
+}
+
 fn handle_optimize_image(id: Value, args: Value) -> Response {
     match optimize_one(&args) {
-        Ok(v) => Response::ok(
+        Ok(o) => Response::ok(
             id,
-            json!({ "content": [{ "type": "text", "text": serde_json::to_string(&v).unwrap() }] }),
+            json!({ "content": [
+                image_block(&o),
+                { "type": "text", "text": serde_json::to_string(&o.report).unwrap() }
+            ] }),
         ),
         Err(e) => Response::err(id, -32000, e),
     }
@@ -291,31 +311,82 @@ fn handle_optimize_image_batch(id: Value, args: Value) -> Response {
         return Response::err(id, -32602, format!("batch exceeds {MAX_BATCH} images"));
     }
     // One bad image returns an error entry; the batch as a whole still succeeds.
+    // Images follow the text block in input order, skipping failed entries.
+    let mut blocks: Vec<Value> = Vec::new();
     let results: Vec<Value> = images
         .iter()
         .enumerate()
         .map(|(idx, item)| match optimize_one(item) {
-            Ok(v) => json!({ "index": idx, "ok": true, "result": v }),
+            Ok(o) => {
+                blocks.push(image_block(&o));
+                json!({ "index": idx, "ok": true, "result": o.report })
+            }
             Err(e) => json!({ "index": idx, "ok": false, "error": e }),
         })
         .collect();
-    Response::ok(
-        id,
-        json!({ "content": [{
-            "type": "text",
-            "text": serde_json::to_string(&json!({ "results": results })).unwrap()
-        }] }),
-    )
+    let mut content = vec![json!({
+        "type": "text",
+        "text": serde_json::to_string(&json!({ "results": results })).unwrap()
+    })];
+    content.extend(blocks);
+    Response::ok(id, json!({ "content": content }))
+}
+
+/// Input files larger than this are refused before being read into memory.
+const MAX_INPUT_BYTES: u64 = 64 * 1024 * 1024;
+
+/// One optimized image: the report to show the model, plus the bytes to hand
+/// back as an MCP `image` block. The base64 must never go into a text block:
+/// the model would read it as hundreds of thousands of text tokens.
+struct Optimized {
+    report: Value,
+    base64: String,
+    mime: &'static str,
+}
+
+/// Where an optimized copy of `input` is written: a stable name under the OS
+/// temp dir, so re-optimizing the same image reuses one file.
+fn output_path_for(input: &Path, optimized_b64: &str, ext: &str) -> PathBuf {
+    let mut h = DefaultHasher::new();
+    optimized_b64.hash(&mut h);
+    let stem = input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("image");
+    std::env::temp_dir()
+        .join("vision-squeezer")
+        .join(format!("{stem}-{:08x}.{ext}", h.finish() as u32))
 }
 
 /// Optimize a single image from an arguments object (same shape as the
-/// `optimize_image` tool input). Returns the savings-report JSON, not an
-/// RPC envelope, so both the single and batch handlers can reuse it.
+/// `optimize_image` tool input): `image_path` (a local file) or `image_base64`.
 // ponytail: batch loops this sequentially — parallelize only if latency is measured as a problem.
-fn optimize_one(args: &Value) -> Result<Value, String> {
-    let b64 = match args.get("image_base64").and_then(|v| v.as_str()) {
-        Some(s) => s,
-        None => return Err("missing image_base64".to_string()),
+fn optimize_one(args: &Value) -> Result<Optimized, String> {
+    let input_path = args
+        .get("image_path")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from);
+    let owned_b64;
+    let b64 = if let Some(path) = &input_path {
+        let len = std::fs::metadata(path)
+            .map_err(|e| format!("cannot read {}: {e}", path.display()))?
+            .len();
+        if len > MAX_INPUT_BYTES {
+            return Err(format!(
+                "{} is larger than {} MB",
+                path.display(),
+                MAX_INPUT_BYTES >> 20
+            ));
+        }
+        let bytes =
+            std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        owned_b64 = B64.encode(bytes);
+        owned_b64.as_str()
+    } else {
+        match args.get("image_base64").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => return Err("missing image_path or image_base64".to_string()),
+        }
     };
     let mode = match args.get("mode").and_then(|v| v.as_str()).unwrap_or("auto") {
         "ocr" => ProcessMode::Ocr,
@@ -390,8 +461,33 @@ fn optimize_one(args: &Value) -> Result<Value, String> {
                 &format!("{:?}", mode),
             );
 
-            Ok(json!({
-                "optimized_base64": r.optimized_base64,
+            let (ext, mime) = match out_fmt {
+                OutputFormat::WebP => ("webp", "image/webp"),
+                OutputFormat::Avif => ("avif", "image/avif"),
+                _ => ("jpg", "image/jpeg"),
+            };
+            let output_path = match &input_path {
+                Some(input) => {
+                    let out = output_path_for(input, &r.optimized_base64, ext);
+                    let bytes = B64.decode(&r.optimized_base64).map_err(|e| e.to_string())?;
+                    if let Some(dir) = out.parent() {
+                        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+                    }
+                    std::fs::write(&out, bytes).map_err(|e| e.to_string())?;
+                    Some(out.display().to_string())
+                }
+                None => None,
+            };
+
+            Ok(Optimized {
+                base64: r.optimized_base64,
+                mime,
+                report: json!({
+                "width": r.width,
+                "height": r.height,
+                "output_path": output_path,
+                "tokens_before": orig_tokens,
+                "tokens_after": opt_tokens,
                 "savings_report": {
                     "tiles_before": r.report.tiles_before,
                     "tiles_after": r.report.tiles_after,
@@ -403,7 +499,8 @@ fn optimize_one(args: &Value) -> Result<Value, String> {
                     "size_reduction_pct": r.report.size_reduction_pct()
                         .map(|p| format!("{:.1}", p))
                 }
-            }))
+                }),
+            })
         }
         Err(e) => Err(e),
     }
@@ -488,10 +585,49 @@ fn print_setup() {
     println!("}}");
 }
 
-fn main() {
-    let _ = vision_squeezer::Persistence::init_db();
+/// `vision-squeezer-mcp optimize <image> [--max-tokens N] [--model M]`: one-shot
+/// mode for hooks and scripts. Prints the JSON report (with output_path) to stdout.
+fn run_optimize_cli(args: &[String]) -> i32 {
+    let Some(path) = args.first() else {
+        eprintln!("usage: vision-squeezer-mcp optimize <image> [--max-tokens N] [--model M]");
+        return 2;
+    };
+    let mut req = json!({ "image_path": path });
+    let mut it = args[1..].iter();
+    while let Some(flag) = it.next() {
+        match (flag.as_str(), it.next()) {
+            ("--max-tokens", Some(v)) if v.parse::<u64>().is_ok() => {
+                req["max_tokens"] = json!(v.parse::<u64>().unwrap())
+            }
+            ("--model", Some(v)) => req["target_model"] = json!(v),
+            _ => {
+                eprintln!("unexpected argument: {flag}");
+                return 2;
+            }
+        }
+    }
+    match optimize_one(&req) {
+        Ok(o) => {
+            println!("{}", o.report);
+            0
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            1
+        }
+    }
+}
 
+fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if matches!(args.get(1).map(String::as_str), Some("--version" | "-V")) {
+        println!("vision-squeezer-mcp {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    let _ = vision_squeezer::Persistence::init_db();
+    if args.get(1).map(String::as_str) == Some("optimize") {
+        std::process::exit(run_optimize_cli(&args[2..]));
+    }
     if args.iter().any(|a| a == "--setup" || a == "--help") {
         print_setup();
         return;

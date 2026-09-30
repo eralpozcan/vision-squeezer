@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Honest positioning.** VisionSqueezer fits images to a token budget before they reach the model. It cannot shrink an image a user pastes, drags, or `@`-attaches into a chat window (Claude Code, Cursor, ChatGPT, ...): the client attaches it before any tool or hook runs. README, docs, `llms.txt`, and every package, registry, and plugin description now say so and list where it does save tokens (code that calls a model API, agent tool calls, files inside a Claude Code project). The "install it and tokens drop" framing was wrong for chat paste.
+- **BREAKING: `optimize_image` and `optimize_image_batch` return the image as an MCP `image` block**, followed by a small text report. They used to put `optimized_base64` inside a text block, which a model reads as text tokens and which can cost more than the image it replaces. MCP clients that parsed `optimized_base64` from the text must read the image block instead.
+- **Install docs fixed.** `npx vision-squeezer image.png ...` never worked (the npm package ships only the MCP binary). Docs now show `npx vision-squeezer optimize <image>` and `--version`.
+
+### Added
+- **`image_path` argument** on `optimize_image` and each `optimize_image_batch` entry. The file is read locally (up to 64 MB), so the model never has to write base64, and the optimized copy is also written to `<tmp>/vision-squeezer/` and returned as `output_path`.
+- **`vision-squeezer-mcp optimize <image> [--max-tokens N] [--model M]`** one-shot mode and `--version` (for hooks and scripts). The MCP server is a local process started by your client; nothing is uploaded anywhere.
+- **Claude Code image-read hook** (`npx vision-squeezer hook`, a `PreToolUse` hook on `Read`). When Claude reads a `.png/.jpg/.jpeg/.webp/.gif` inside the project, it gets the optimized copy. `install --client claude` (mcp-add) merges it into `settings.json` for the chosen scope (`--no-hook` skips it) and the plugin ships it in `hooks/hooks.json`. Files outside the project, symlinks that leave it, and images with no token saving are passed through unchanged. Pasted images and `@` attachments never reach a `Read` call and are not covered.
+- **Hook and MCP tests:** `node --test tests/hook.test.js tests/install.test.js`, plus `image_path`, image-block, and missing-file cases in `tests/mcp.rs`.
+
 ## [0.7.1] - 2026-10-01
 
 ### Added

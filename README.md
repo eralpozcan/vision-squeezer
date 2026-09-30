@@ -11,9 +11,17 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Elastic--2.0-blue" alt="License"></a>
 </p>
 
-LLM-native image optimization middleware & MCP server. Reduces vision model token consumption by preprocessing images into tile-boundary-aligned, padding-free formats.
+Fit images to a vision-LLM token budget **before** they reach the model. A library, CLI, and MCP server for code, agents, and pipelines.
 
-Works with **any agent or editor** that speaks MCP — Claude, GPT, Gemini, Codex, or your own.
+> **What it does not do.** VisionSqueezer cannot shrink an image you paste, drag, or `@`-attach into a chat window (Claude Code, Cursor, ChatGPT, and so on). The client attaches it before any tool or hook runs, so it is billed at full size.
+>
+> **Where it does save tokens:**
+> - Images your code sends to a model API: the Rust crate, the Python bindings, the CLI.
+> - Images an agent reads from files or gets through tools (screenshots, crawlers, browser automation): the MCP server, or the Claude Code image-read hook for files inside the project.
+>
+> See [Where it saves tokens](#where-it-saves-tokens) for the exact cases.
+
+The MCP server runs in any MCP client (Claude Code, Cursor, Codex, Gemini CLI, and others), but it only sees images the agent passes to it.
 
 ---
 
@@ -459,7 +467,8 @@ Gemini           6192     1032     5160 (83.3%)
 
 | Argument | Type | Required | Default |
 |----------|------|----------|---------|
-| `image_base64` | string | ✓ | — |
+| `image_path` | string | one of the two | — (preferred: read locally, optimized copy also written to a temp file) |
+| `image_base64` | string | one of the two | — |
 | `mode` | `"auto"` \| `"standard"` \| `"ocr"` | — | `"auto"` |
 | `output_format` | `"jpeg"` \| `"webp"` | — | `"jpeg"` |
 | `quality` | integer 1–100 | — | 75 |
@@ -470,19 +479,37 @@ Gemini           6192     1032     5160 (83.3%)
 | `max_tiles` | integer | — | — |
 | `target_model` | string enum | — | Core models plus `glm`, `pixtral`, `gemma`, `internvl`, `minicpm`, `molmo`, `aya`, `phi4`, `granite`, `llava`, `falcon`, `minimax`, `step`, `ling`, `voyage` |
 
-**Response:**
+**Response:** an MCP `image` block with the optimized image, then a text block with a small report. The image is never base64 inside the text: a model reads that as text tokens, which would cost more than the image it replaces.
 ```json
 {
-  "optimized_base64": "...",
+  "width": 1344,
+  "height": 924,
+  "output_path": "/tmp/vision-squeezer/shot-1a2b3c4d.jpg",
+  "tokens_before": 4674,
+  "tokens_after": 1584,
   "savings_report": {
-    "tiles_before": 48,
-    "tiles_after": 35,
-    "tiles_saved": 13,
-    "token_reduction_pct": "27.1",
-    "size_reduction_pct": "58.9"
+    "tiles_before": 4674,
+    "tiles_after": 1584,
+    "tiles_saved": 3090,
+    "token_reduction_pct": "66.1",
+    "size_reduction_pct": "67.5"
   }
 }
 ```
+`output_path` is set when the input was an `image_path`.
+
+### Where it saves tokens
+
+The optimization only helps if the **smaller image is what reaches the model**. What that means in practice:
+
+| How the image gets to the model | Optimized? |
+|---|---|
+| Claude Code reads an image file inside your project (`Read`) | **Yes**, by the image-read hook (added by `install --client claude`, and shipped with the plugin) |
+| The agent calls `optimize_image` with an `image_path` | **Yes**, from any folder. Tell your agent to do this in `CLAUDE.md` / `AGENTS.md` |
+| You paste or drag an image into the chat | **No.** The client attaches it before any tool or hook runs |
+| You attach a file with `@path` | **No.** No tool call happens, so no hook fires |
+
+Save screenshots into the project (for example `screenshots/`) and reference them by path to get the saving. The hook only rewrites files inside the project: it answers with an allow decision, so it must not open files a plain `Read` would have asked about.
 
 ## Config Reference
 

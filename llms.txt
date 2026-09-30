@@ -1,6 +1,6 @@
 # VisionSqueezer
 
-> LLM-native image optimization middleware & MCP server. Reduces vision model token consumption by mathematically snapping images to provider-specific tile boundaries.
+> Fits images to a vision-LLM token budget before they reach the model. A library, CLI and MCP server for code, agents and pipelines. It cannot shrink images pasted or attached in a chat window: the client sends those before any tool runs.
 
 ## Key Features
 - **Provider-Aware Resizing:** Current Claude 28px patches, OpenAI GPT-6/GPT-5.6 32px patches, legacy OpenAI tiling, and Gemini 768px tiles.

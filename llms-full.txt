@@ -1,6 +1,6 @@
 # VisionSqueezer: Technical Reference for AI Agents
 
-VisionSqueezer is a middleware designed to bridge the gap between human-centric images and LLM-native vision tokenomics. It ensures that images are pre-processed to trigger the absolute minimum billable tiles across major AI providers.
+VisionSqueezer fits images to a vision-LLM token budget before they are sent. It applies to images that pass through your code, your agent's tool calls, or files in your project. It cannot shrink an image a user pastes, drags, or attaches with @ in a chat window, because the client attaches it before any tool or hook runs.
 
 ## Mathematical Foundations (2026 Billing)
 

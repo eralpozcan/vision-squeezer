@@ -1,7 +1,7 @@
 ---
 seo:
   title: VisionSqueezer — Stop Leaking Vision Tokens
-  description: LLM-native image optimization middleware & MCP server. Fits images to a token budget for Claude, GPT, and Gemini, cutting vision tokens by about 66%.
+  description: Fit images to a token budget before they reach Claude, GPT, or Gemini. For code, agents and pipelines, not for images pasted into a chat.
 ---
 
 ::u-page-hero{class="dark:bg-gradient-to-b from-neutral-900 to-neutral-950"}
@@ -18,7 +18,7 @@ orientation: horizontal
 Stop Leaking [Vision Tokens]{.text-primary}.
 
 #description
-The LLM-native image optimization middleware. Give it a token budget (1600 by default in the MCP server) and it downsizes images on Claude, GPT, and Gemini's exact grid boundaries. About 66% fewer Claude tokens on our sample photos, with composition, colour, and large text intact.
+Fit images to a token budget before they reach the model. Give it a budget (1600 by default in the MCP server) and it downsizes images on Claude, GPT, and Gemini's exact grid boundaries: about 66% fewer Claude tokens on our sample photos, with composition, colour, and large text intact. It works on images your code, agents, and project files send. It cannot shrink an image you paste into a chat window.
 
 #links
   :::u-button

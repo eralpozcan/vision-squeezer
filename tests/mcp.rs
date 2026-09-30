@@ -47,7 +47,7 @@ fn mcp_tools_list_includes_optimize_image() {
 }
 
 #[test]
-fn mcp_optimize_image_returns_base64_and_report() {
+fn mcp_optimize_image_returns_image_block_and_report() {
     let mut child = Command::cargo_bin("vision-squeezer-mcp")
         .unwrap()
         .stdin(Stdio::piped())
@@ -81,10 +81,15 @@ fn mcp_optimize_image_returns_base64_and_report() {
 
     let v: serde_json::Value = serde_json::from_str(&line).expect("json parse");
     assert_eq!(v["id"], serde_json::json!(42));
-    let content = &v["result"]["content"][0]["text"];
-    let inner: serde_json::Value =
-        serde_json::from_str(content.as_str().unwrap()).expect("inner json");
-    assert!(inner["optimized_base64"].as_str().unwrap().len() > 0);
+    // The image goes back as an MCP image block; the text block is a small report
+    // and must not carry the base64 (the model would read it as text tokens).
+    let image = &v["result"]["content"][0];
+    assert_eq!(image["type"], "image");
+    assert_eq!(image["mimeType"], "image/jpeg");
+    assert!(image["data"].as_str().unwrap().len() > 0);
+    let text = v["result"]["content"][1]["text"].as_str().unwrap();
+    assert!(!text.contains("base64"));
+    let inner: serde_json::Value = serde_json::from_str(text).expect("inner json");
     assert!(inner["savings_report"]["tiles_before"].is_u64());
     assert!(inner["savings_report"]["tiles_after"].is_u64());
 
@@ -136,16 +141,81 @@ fn mcp_optimize_image_batch_processes_each_entry() {
     let results = inner["results"].as_array().expect("results array");
     assert_eq!(results.len(), 2);
     assert_eq!(results[0]["ok"], serde_json::json!(true));
-    assert!(
-        results[0]["result"]["optimized_base64"]
-            .as_str()
-            .unwrap()
-            .len()
-            > 0
-    );
+    assert!(results[0]["result"]["savings_report"].is_object());
     assert_eq!(results[1]["ok"], serde_json::json!(false));
     assert!(results[1]["error"].is_string());
+    // One image block for the one successful entry, after the text block.
+    let content = v["result"]["content"].as_array().unwrap();
+    assert_eq!(content.len(), 2);
+    assert_eq!(content[1]["type"], "image");
 
+    let _ = child.kill();
+}
+
+#[test]
+fn mcp_optimize_image_accepts_a_file_path_and_writes_a_copy() {
+    use base64::Engine;
+    let dir = std::env::temp_dir().join(format!("vs-mcp-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("input.png");
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(make_image_base64(1025, 1025))
+        .unwrap();
+    std::fs::write(&input, bytes).unwrap();
+
+    let mut child = Command::cargo_bin("vision-squeezer-mcp")
+        .unwrap()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn mcp");
+    let req = serde_json::json!({
+        "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+        "params": { "name": "optimize_image", "arguments": { "image_path": input } }
+    });
+    writeln!(child.stdin.as_mut().unwrap(), "{}", req).unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_str(&line).expect("json parse");
+    assert_eq!(v["result"]["content"][0]["type"], "image");
+    let report: serde_json::Value =
+        serde_json::from_str(v["result"]["content"][1]["text"].as_str().unwrap()).unwrap();
+    let out = report["output_path"].as_str().expect("output_path");
+    assert!(std::path::Path::new(out).exists(), "{out} was not written");
+    assert!(report["tokens_after"].as_u64() <= report["tokens_before"].as_u64());
+
+    let _ = child.kill();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn mcp_optimize_image_rejects_a_missing_file() {
+    let mut child = Command::cargo_bin("vision-squeezer-mcp")
+        .unwrap()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn mcp");
+    let req = serde_json::json!({
+        "jsonrpc": "2.0", "id": 10, "method": "tools/call",
+        "params": { "name": "optimize_image", "arguments": { "image_path": "/definitely/not/here.png" } }
+    });
+    writeln!(child.stdin.as_mut().unwrap(), "{}", req).unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_str(&line).expect("json parse");
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("cannot read")
+    );
     let _ = child.kill();
 }
 

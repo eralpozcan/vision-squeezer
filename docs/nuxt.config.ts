@@ -95,7 +95,7 @@ export default defineNuxtConfig({
   llms: {
     domain: 'https://visionsqueezer.com',
     title: 'VisionSqueezer',
-    description: 'LLM-native image optimization middleware & MCP server. Reduces vision model token consumption by mathematically snapping images to provider-specific tile boundaries.',
+    description: 'Fits images to a vision-LLM token budget before they reach the model. A library, CLI and MCP server for code, agents and pipelines; it cannot shrink images pasted into a chat window.',
     full: {
       title: 'VisionSqueezer — Full Documentation',
       description: 'Complete technical reference for VisionSqueezer: provider math, CLI, MCP server, Python bindings, and sandbox operations.'

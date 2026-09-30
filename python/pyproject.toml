@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "vision-squeezer"
 version = "0.7.1"
-description = "LLM-native image optimization — reduces vision model token consumption by snapping to tile boundaries"
+description = "Fit images to a vision-LLM token budget before you send them (Python bindings for vision-squeezer)"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "Elastic-2.0" }

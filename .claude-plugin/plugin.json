@@ -1,6 +1,6 @@
 {
   "name": "vision-squeezer",
-  "description": "LLM-native image optimization tools for Claude Code — analytics and health check skills.",
+  "description": "Token-budget image optimization for Claude Code: optimizes images the agent reads from your project, plus analytics and health-check skills.",
   "author": {
     "name": "Eralp Özcan",
     "url": "https://github.com/eralpozcan"

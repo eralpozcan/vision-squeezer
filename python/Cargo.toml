@@ -2,7 +2,7 @@
 name = "vision-squeezer-py"
 version = "0.7.1"
 edition = "2021"
-description = "Python bindings for vision-squeezer — LLM-native image optimization"
+description = "Python bindings for vision-squeezer: fit images to a vision-LLM token budget before you send them"
 license = "Elastic-2.0"
 publish = false
 

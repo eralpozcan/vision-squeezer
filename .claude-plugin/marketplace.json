@@ -6,13 +6,13 @@
     "email": "quarentin@gmail.com"
   },
   "metadata": {
-    "description": "LLM-native image optimization tools for Claude Code"
+    "description": "Token-budget image optimization for Claude Code"
   },
   "plugins": [
     {
       "name": "vision-squeezer-mcp",
       "source": "./plugins/vision-squeezer-mcp",
-      "description": "VisionSqueezer for Claude Code — MCP server (optimize_image / sandbox_execute / get_savings_stats) bundled with the vision-doctor, vision-upgrade, and vision-stats skills. One install brings everything.",
+      "description": "VisionSqueezer for Claude Code: MCP server (optimize_image / sandbox_execute / get_savings_stats), an image-read hook for project files, and the vision-doctor, vision-upgrade, and vision-stats skills. Does not shrink images pasted into the chat.",
       "version": "0.7.1",
       "author": {
         "name": "Eralp Özcan",

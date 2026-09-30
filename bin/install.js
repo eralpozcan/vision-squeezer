@@ -122,13 +122,14 @@ const MARKETPLACE_REPO = 'eralpozcan/vision-squeezer';
 const PLUGIN_NAME = 'vision-squeezer-mcp';
 
 function parseArgs(argv) {
-  const out = { scope: null, client: null, method: null, yes: false };
+  const out = { scope: null, client: null, method: null, yes: false, hook: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--scope' || a === '-s') out.scope = argv[++i];
     else if (a === '--client' || a === '-c') out.client = argv[++i];
     else if (a === '--method' || a === '-m') out.method = argv[++i];
     else if (a === '--yes' || a === '-y') out.yes = true;
+    else if (a === '--no-hook') out.hook = false;
     else if (a === '--help' || a === '-h') out.help = true;
   }
   return out;
@@ -145,6 +146,7 @@ Options:
   -m, --method <name>   Install method for Claude Code (plugin | mcp-add)
   -s, --scope <name>    Install scope for 'mcp-add' (user | local | project)
   -y, --yes             Skip confirmation prompt
+      --no-hook         Claude Code mcp-add: do not add the image-read hook
   -h, --help            Show this help
 
 Methods (Claude Code only):
@@ -155,6 +157,13 @@ Methods (Claude Code only):
   mcp-add   claude mcp add [--scope X] vision-squeezer -- npx -y vision-squeezer@<version>
             Server only, no skills bundled. The version is pinned to the
             installer's package version so the npx cache busts on upgrade.
+
+Image-read hook (Claude Code):
+  With mcp-add the installer also adds a PreToolUse hook to Claude Code's
+  settings.json (user: ~/.claude, project: .claude/settings.json, local:
+  .claude/settings.local.json). When Claude reads an image inside the project,
+  the hook hands it the token-optimized copy. The plugin method ships the same
+  hook. Pass --no-hook to skip it. Pasted images and @-files are not covered.
 
 Scopes (mcp-add):
   user      All projects on this machine (recommended)
@@ -225,6 +234,54 @@ function commandExists(cmd) {
     stdio: 'ignore',
   });
   return r.status === 0;
+}
+
+// ── Claude Code image-read hook ──────────────────────────────────────────────
+
+const HOOK_COMMAND = `npx -y vision-squeezer@${PKG_VERSION} hook`;
+const HOOK_IMAGE_GLOBS = ['*.png', '*.jpg', '*.jpeg', '*.webp', '*.gif'];
+
+// One handler per extension: the `if` filter keeps the hook from spawning on
+// every Read of a source file.
+function hookEntry() {
+  return {
+    matcher: 'Read',
+    hooks: HOOK_IMAGE_GLOBS.map((g) => ({ type: 'command', if: `Read(${g})`, command: HOOK_COMMAND })),
+  };
+}
+
+function isOurHook(entry) {
+  return Array.isArray(entry && entry.hooks)
+    && entry.hooks.some((h) => typeof h.command === 'string' && /vision-squeezer@\S+ hook$/.test(h.command));
+}
+
+function claudeSettingsPath(scope) {
+  if (scope.key === 'user') return path.join(os.homedir(), '.claude', 'settings.json');
+  return path.join(process.cwd(), '.claude', scope.key === 'project' ? 'settings.json' : 'settings.local.json');
+}
+
+// Merge our hook into Claude Code's settings. Other settings and hooks are kept,
+// an older copy of ours is replaced (so upgrades re-pin the version), and a file
+// that cannot be parsed is left untouched.
+function installClaudeHook(scope) {
+  const file = claudeSettingsPath(scope);
+  let settings = {};
+  if (fs.existsSync(file)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (err) {
+      console.error(`Could not add the image-read hook: cannot parse ${file} (${err.message}). Left untouched.`);
+      return false;
+    }
+  } else {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+  }
+  settings.hooks = settings.hooks || {};
+  const pre = Array.isArray(settings.hooks.PreToolUse) ? settings.hooks.PreToolUse : [];
+  settings.hooks.PreToolUse = [...pre.filter((e) => !isOurHook(e)), hookEntry()];
+  fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
+  console.log(`Added the image-read hook to ${file}. Claude Code now reads project images at their optimized size.`);
+  return true;
 }
 
 function buildArgs(client, scope) {
@@ -367,6 +424,7 @@ async function main() {
       return result.status ?? 1;
     }
     console.log(`\nDone. VisionSqueezer registered with ${client.label} (scope: ${scope.key}).`);
+    if (client.key === 'claude' && opts.hook) installClaudeHook(scope);
     return 0;
   } finally {
     if (rl && !rl.closed) rl.close();

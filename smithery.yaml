@@ -1,6 +1,6 @@
 name: vision-squeezer
 displayName: VisionSqueezer
-description: LLM-native image optimization middleware. Reduces vision model token consumption by snapping images to tile boundaries, removing padding, and re-encoding. Supports Claude, GPT-4o, GPT-5, and Gemini.
+description: Fit images to a vision-LLM token budget before you send them. For agents and pipelines that pass image files or data to tools; it cannot resize images pasted into a chat window.
 license: Elastic-2.0
 homepage: https://github.com/eralpozcan/vision-squeezer
 repository: https://github.com/eralpozcan/vision-squeezer
@@ -8,7 +8,7 @@ icon: https://raw.githubusercontent.com/eralpozcan/vision-squeezer/main/assets/f
 
 tools:
   - name: optimize_image
-    description: Resize and optimize an image for LLM vision APIs. Snaps dimensions to tile boundaries, removes padding, and re-encodes to minimize token consumption.
+    description: Fit an image to a token budget for LLM vision APIs (default 1600). Takes an image_path or image_base64 and returns the optimized image plus a short report.
   - name: sandbox_execute
     description: Apply atomic image operations (crop, grayscale, binarize, resize, contrast, brightness) locally before sending to an LLM.
   - name: get_savings_stats

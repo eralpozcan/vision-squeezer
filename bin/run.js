@@ -12,6 +12,12 @@ if (process.argv[2] === 'install') {
   return;
 }
 
+// `npx vision-squeezer hook` → Claude Code PreToolUse hook (see hook.js).
+if (process.argv[2] === 'hook') {
+  require('./hook.js');
+  return;
+}
+
 const ext = process.platform === 'win32' ? '.exe' : '';
 const bin = path.join(__dirname, `vision-squeezer-mcp${ext}`);
 

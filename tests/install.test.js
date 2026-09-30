@@ -147,3 +147,77 @@ test('gemini rejects the local scope', posix, () => {
   assert.notStrictEqual(r.status, 0);
   assert.match(r.stderr, /supports only: user, project/);
 });
+
+// Claude Code image-read hook, added next to `claude mcp add`.
+function claudeInstall(extra, { home = tmp(), cwd } = {}) {
+  const bin = tmp();
+  fs.writeFileSync(path.join(bin, 'claude'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const r = spawnSync(process.execPath, [INSTALL, '--client', 'claude', '--method', 'mcp-add', '--yes', ...extra], {
+    env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    cwd: cwd || home,
+    encoding: 'utf8',
+  });
+  return { r, home };
+}
+const HOOK_CMD = `npx -y vision-squeezer@${VERSION} hook`;
+const ours = (settings) => settings.hooks.PreToolUse.filter((e) => e.hooks.some((h) => h.command.endsWith(' hook')));
+
+test('claude mcp-add also adds the image-read hook (user scope)', posix, () => {
+  const { r, home } = claudeInstall(['--scope', 'user']);
+  assert.strictEqual(r.status, 0, r.stderr);
+  const s = read(path.join(home, '.claude', 'settings.json'));
+  const [entry] = ours(s);
+  assert.strictEqual(entry.matcher, 'Read');
+  assert.deepStrictEqual(entry.hooks.map((h) => h.if), ['Read(*.png)', 'Read(*.jpg)', 'Read(*.jpeg)', 'Read(*.webp)', 'Read(*.gif)']);
+  assert.ok(entry.hooks.every((h) => h.type === 'command' && h.command === HOOK_CMD));
+});
+
+test('the hook is merged: other settings and hooks kept, re-run does not duplicate, old version replaced', posix, () => {
+  const home = tmp();
+  const file = path.join(home, '.claude', 'settings.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const other = { matcher: 'Bash', hooks: [{ type: 'command', command: 'echo hi' }] };
+  const old = { matcher: 'Read', hooks: [{ type: 'command', if: 'Read(*.png)', command: 'npx -y vision-squeezer@0.0.1 hook' }] };
+  fs.writeFileSync(file, JSON.stringify({ model: 'x', hooks: { PreToolUse: [other, old], Stop: [] } }));
+  claudeInstall(['--scope', 'user'], { home });
+  const r = claudeInstall(['--scope', 'user'], { home }).r;
+  assert.strictEqual(r.status, 0, r.stderr);
+  const s = read(file);
+  assert.strictEqual(s.model, 'x');
+  assert.deepStrictEqual(s.hooks.Stop, []);
+  assert.strictEqual(s.hooks.PreToolUse.length, 2);
+  assert.deepStrictEqual(s.hooks.PreToolUse[0], other);
+  assert.ok(s.hooks.PreToolUse[1].hooks.every((h) => h.command === HOOK_CMD));
+});
+
+test('--no-hook skips the hook', posix, () => {
+  const { r, home } = claudeInstall(['--scope', 'user', '--no-hook']);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.ok(!fs.existsSync(path.join(home, '.claude', 'settings.json')));
+});
+
+test('project and local scopes write into the project .claude dir', posix, () => {
+  const proj = tmp();
+  claudeInstall(['--scope', 'project'], { cwd: proj });
+  claudeInstall(['--scope', 'local'], { cwd: proj });
+  assert.ok(ours(read(path.join(proj, '.claude', 'settings.json'))).length === 1);
+  assert.ok(ours(read(path.join(proj, '.claude', 'settings.local.json'))).length === 1);
+});
+
+test('settings.json that cannot be parsed is left untouched and the install still succeeds', posix, () => {
+  const home = tmp();
+  const file = path.join(home, '.claude', 'settings.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{ // comment\n}');
+  const { r } = claudeInstall(['--scope', 'user'], { home });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), '{ // comment\n}');
+  assert.match(r.stderr, /cannot parse/);
+});
+
+test('the plugin ships the same hook, pinned to the package version', () => {
+  const plugin = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'plugins', 'vision-squeezer-mcp', 'hooks', 'hooks.json'), 'utf8'));
+  const [entry] = plugin.hooks.PreToolUse;
+  assert.strictEqual(entry.matcher, 'Read');
+  assert.ok(entry.hooks.every((h) => h.command === HOOK_CMD), 'bump hooks.json with the version');
+});
