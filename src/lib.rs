@@ -36,6 +36,9 @@ pub struct ProcessConfig {
     pub target_model: Option<VisionModel>,
     /// Limit the maximum number of tiles the output image can consume.
     pub max_tiles: Option<u32>,
+    /// Token budget for the output image, measured with the target model
+    /// (Claude when unset). The image is downscaled until it fits; 0 disables.
+    pub max_tokens: Option<u32>,
     /// Use saliency (edge-energy) based crop instead of corner-tolerance crop.
     pub smart_crop: bool,
 }
@@ -50,6 +53,7 @@ impl Default for ProcessConfig {
             output_format: OutputFormat::Jpeg,
             target_model: None,
             max_tiles: None,
+            max_tokens: None,
             smart_crop: false,
         }
     }
@@ -90,6 +94,10 @@ impl ProcessConfigBuilder {
     }
     pub fn max_tiles(mut self, m: u32) -> Self {
         self.0.max_tiles = Some(m);
+        self
+    }
+    pub fn max_tokens(mut self, t: u32) -> Self {
+        self.0.max_tokens = Some(t);
         self
     }
     pub fn smart_crop(mut self, b: bool) -> Self {
@@ -680,7 +688,13 @@ pub fn process(
     cfg: &ProcessConfig,
 ) -> ProcessResult {
     let (orig_w, orig_h) = (img.width(), img.height());
-    let tiles_before = match cfg.target_model {
+    // A token budget needs a model to measure against; Claude when none is targeted,
+    // so sizing uses its patch grid instead of 512px tiles (which distort the aspect ratio).
+    let budget_model = cfg.target_model.or(cfg
+        .max_tokens
+        .filter(|&t| t > 0)
+        .map(|_| VisionModel::Claude));
+    let tiles_before = match budget_model {
         Some(model) => estimate_tokens(orig_w, orig_h, model).tiles,
         None => tile_count(orig_w, cfg.tile_size) * tile_count(orig_h, cfg.tile_size),
     };
@@ -694,7 +708,7 @@ pub fn process(
     } else {
         img
     };
-    let (mut opt_w, mut opt_h) = match cfg.target_model {
+    let (mut opt_w, mut opt_h) = match budget_model {
         Some(model) => optimal_send_dimensions(after_crop.width(), after_crop.height(), model),
         None => {
             let d = calculate_optimal_dimensions_with(
@@ -707,28 +721,30 @@ pub fn process(
     };
 
     if let Some(max_t) = cfg.max_tiles {
-        let (nw, nh) = enforce_max_tiles(opt_w, opt_h, max_t, cfg.tile_size, cfg.target_model);
+        let (nw, nh) =
+            enforce_max_tiles(opt_w, opt_h, max_t, cfg.tile_size, cfg.target_model, false);
+        opt_w = nw;
+        opt_h = nh;
+    }
+    if let Some(max_t) = cfg.max_tokens {
+        let (nw, nh) = enforce_max_tiles(opt_w, opt_h, max_t, cfg.tile_size, budget_model, true);
         opt_w = nw;
         opt_h = nh;
     }
 
-    let tiles_after = match cfg.target_model {
+    let tiles_after = match budget_model {
         Some(model) => {
             let est = estimate_tokens(opt_w, opt_h, model);
             est.tiles
         }
         None => tile_count(opt_w, cfg.tile_size) * tile_count(opt_h, cfg.tile_size),
     };
-    let resized = after_crop.resize_exact(opt_w, opt_h, FilterType::Lanczos3);
+    let resized = fit_to_grid(&after_crop, opt_w, opt_h);
 
+    // Auto never binarizes: Otsu throws away colour (error highlights, chart series)
+    // and saves bytes only, not tokens. Binarize only when the caller asks for Ocr.
     let actual_mode = match mode {
-        ProcessMode::Auto => {
-            if detect_ocr_mode(&after_crop) {
-                ProcessMode::Ocr
-            } else {
-                ProcessMode::Standard
-            }
-        }
+        ProcessMode::Auto => ProcessMode::Standard,
         m => m,
     };
 
@@ -755,12 +771,27 @@ pub fn process(
     }
 }
 
+/// Resize to the grid-snapped size without stretching: scale uniformly to cover it, then
+/// centre-crop the overflow. Gaps over 5% per axis come from coarse tile grids
+/// (e.g. Llama's 560px), where cropping would cut real content, so those still stretch.
+fn fit_to_grid(img: &DynamicImage, w: u32, h: u32) -> DynamicImage {
+    let s = (w as f64 / img.width() as f64).max(h as f64 / img.height() as f64);
+    let cw = ((img.width() as f64 * s).round() as u32).max(w);
+    let ch = ((img.height() as f64 * s).round() as u32).max(h);
+    if (cw - w) * 20 > cw || (ch - h) * 20 > ch {
+        return img.resize_exact(w, h, FilterType::Lanczos3);
+    }
+    img.resize_exact(cw, ch, FilterType::Lanczos3)
+        .crop_imm((cw - w) / 2, (ch - h) / 2, w, h)
+}
+
 fn enforce_max_tiles(
     mut width: u32,
     mut height: u32,
     max_tiles: u32,
     default_tile_size: u32,
     model: Option<VisionModel>,
+    by_tokens: bool,
 ) -> (u32, u32) {
     if max_tiles == 0 {
         return (width, height);
@@ -780,7 +811,10 @@ fn enforce_max_tiles(
         };
 
         let tiles = match model {
-            Some(m) => estimate_tokens(snapped_w, snapped_h, m).tiles,
+            Some(m) => {
+                let est = estimate_tokens(snapped_w, snapped_h, m);
+                if by_tokens { est.tokens } else { est.tiles }
+            }
             None => {
                 tile_count(snapped_w, default_tile_size) * tile_count(snapped_h, default_tile_size)
             }
@@ -790,7 +824,7 @@ fn enforce_max_tiles(
             return (snapped_w, snapped_h);
         }
 
-        scale *= 0.95;
+        scale *= 0.98;
         width = (orig_w as f64 * scale) as u32;
         height = (orig_h as f64 * scale) as u32;
         width = width.max(1);
@@ -1430,6 +1464,59 @@ mod tests {
             &cfg(),
         );
         assert!(result.report.tiles_after < result.report.tiles_before);
+    }
+
+    #[test]
+    fn max_tokens_budget_is_respected() {
+        let img = DynamicImage::ImageRgb8(ImageBuffer::from_fn(1200, 835, |x, y| {
+            image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x + y) % 239) as u8])
+        }));
+        for budget in [500u32, 900, 1200] {
+            let cfg = ProcessConfig::builder()
+                .crop(false)
+                .max_tokens(budget)
+                .build();
+            let r = process(img.clone(), ProcessMode::Standard, 0, &cfg);
+            let t = estimate_tokens(r.width, r.height, VisionModel::Claude).tokens;
+            assert!(t <= budget, "budget {budget}: got {t} tokens");
+            assert!(
+                t * 10 >= budget * 8,
+                "budget {budget}: shrunk too far ({t})"
+            );
+        }
+    }
+
+    #[test]
+    fn auto_mode_keeps_colour() {
+        let mut img = image::RgbImage::from_pixel(600, 400, image::Rgb([30, 30, 34]));
+        for y in 100..140 {
+            for x in 100..300 {
+                img.put_pixel(x, y, image::Rgb([230, 40, 40]));
+            }
+        }
+        let cfg = ProcessConfig::builder().crop(false).build();
+        let r = process(DynamicImage::ImageRgb8(img), ProcessMode::Auto, 0, &cfg);
+        let has_red = r.image.to_rgb8().pixels().any(|p| p[0] > 150 && p[1] < 100);
+        assert!(has_red, "auto mode binarized away the red region");
+    }
+
+    #[test]
+    fn fit_to_grid_crops_evenly_instead_of_stretching() {
+        // 1000x700 -> 980x672: uniform scale 0.98, 14 rows cropped (7 top, 7 bottom).
+        // A marker row at y=100 must land at ~91; a stretch (0.96) would put it at 96.
+        let mut img = image::RgbImage::from_pixel(1000, 700, image::Rgb([0, 0, 0]));
+        for x in 0..1000 {
+            img.put_pixel(x, 100, image::Rgb([255, 255, 255]));
+        }
+        let out = fit_to_grid(&DynamicImage::ImageRgb8(img), 980, 672).to_luma8();
+        assert_eq!((out.width(), out.height()), (980, 672));
+        let row = (0..672)
+            .max_by_key(|&y| out.get_pixel(490, y).0[0])
+            .unwrap();
+        assert!(
+            (89..=93).contains(&row),
+            "marker at row {row}, expected ~91"
+        );
     }
 
     #[test]

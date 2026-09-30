@@ -7,6 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Token budget: `max_tokens`.** `ProcessConfig::max_tokens`, `--max-tokens N` on the CLI and a `max_tokens` argument on the MCP `optimize_image` tools. The image is downscaled until the target model's token estimate fits (Claude when no `target_model` is set). **The MCP server now defaults to 1600**; pass `0` to disable. On the sample photos this cuts Claude 4.7+ tokens by ~66% and GPT-6 by ~50%; before, token counts barely moved and file size was the only real saving.
+
+### Changed
+- **`auto` mode no longer binarizes.** It used to switch to Otsu black-and-white when under 10% of pixels were coloured, which erased error highlights and chart colours and saved bytes, not tokens. `auto` now behaves like `standard`; black-and-white output needs an explicit `mode: ocr`. `detect_ocr_mode` stays exported but is no longer called by `process()`.
+- **Resizing no longer stretches.** The grid-snapped size is reached by scaling uniformly and centre-cropping the overflow (a few pixels per edge) instead of `resize_exact`, which distorted the aspect ratio by up to ~1.5%. Gaps over 5% per axis, which come from coarse tile grids such as Llama's 560px, still stretch.
+- **`--max-tiles` fits closer to its limit.** The shrink step is 2% instead of 5%.
+- **Savings report uses the budget model.** With a budget and no target model, `tiles_before`/`tiles_after` and `token_reduction_pct` are measured with Claude instead of 512px tiles.
+- **`mcp-publish.yml` runs after `Release` succeeds** (`workflow_run`) instead of on the tag push. The registry checks that the npm version exists, and the tag-push trigger raced `npm publish` (v0.6.2 failed with a 404).
+- **Project instructions moved to `AGENTS.md`**; `CLAUDE.md` imports it with `@AGENTS.md`.
+- **README and docs benchmarks regenerated** for the current models and the budget workflow. The docs savings calculator now compares no budget / 1600 / 1000 tokens (GPT-6 instead of GPT-4o); `--max-tokens`, `--mode` and the MCP `max_tokens` argument are documented.
+
 ## [0.6.1] - 2026-07-21
 
 ### Added

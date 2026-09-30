@@ -26,6 +26,7 @@ fn print_usage() {
         "  --model <provider-alias>  model-aware resizing (e.g. gpt6, claude, gemini, qwen, kimi, pixtral)"
     );
     eprintln!("  --max-tiles N              (limit maximum token tiles)");
+    eprintln!("  --max-tokens N             (token budget: downscale until the output fits)");
     eprintln!("  --output, -o <path>        (custom output path)");
     eprintln!(
         "  --json                     (machine-readable JSON output, suppresses human table)"
@@ -138,6 +139,12 @@ fn main() {
                 i += 1;
                 if let Some(m) = args.get(i).and_then(|s| s.parse().ok()) {
                     cfg = cfg.max_tiles(m);
+                }
+            }
+            "--max-tokens" => {
+                i += 1;
+                if let Some(m) = args.get(i).and_then(|s| s.parse().ok()) {
+                    cfg = cfg.max_tokens(m);
                 }
             }
             "--no-crop" => {

@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use vision_squeezer::{OutputFormat, ProcessConfig, ProcessMode, VisionModel, optimize_image};
 
+/// Token budget applied when the caller does not pass `max_tokens` (≈ Claude's former 1568-token tier).
+const DEFAULT_MAX_TOKENS: u32 = 1600;
+
 // ── JSON-RPC types ────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -73,7 +76,7 @@ fn tools_list() -> Value {
                             "type": "string",
                             "enum": ["standard", "ocr", "auto"],
                             "default": "auto",
-                            "description": "auto = detect from color variance; standard = general vision; ocr = Otsu-threshold grayscale for text."
+                            "description": "auto = standard (colour preserved); standard = general vision; ocr = Otsu-threshold black and white, text only."
                         },
                         "output_format": {
                             "type": "string",
@@ -109,6 +112,12 @@ fn tools_list() -> Value {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Hard cap on maximum tile count. Image will be progressively downscaled until it fits within this budget."
+                        },
+                        "max_tokens": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 1600,
+                            "description": "Token budget for the output image, measured with target_model (Claude when unset). The image is downscaled until it fits. 0 disables the cap."
                         },
                         "target_model": {
                             "type": "string",
@@ -347,6 +356,11 @@ fn optimize_one(args: &Value) -> Result<Value, String> {
     if let Some(max_t) = args.get("max_tiles").and_then(|v| v.as_u64()) {
         cfg_builder = cfg_builder.max_tiles(max_t as u32);
     }
+    cfg_builder = cfg_builder.max_tokens(
+        args.get("max_tokens")
+            .and_then(|v| v.as_u64())
+            .map_or(DEFAULT_MAX_TOKENS, |t| t as u32),
+    );
     if let Some(model_str) = args.get("target_model").and_then(|v| v.as_str())
         && let Some(model) = VisionModel::parse(model_str)
     {

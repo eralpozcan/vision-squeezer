@@ -266,7 +266,7 @@ Then use the binary path directly in any config above instead of `npx`:
 
 ```bash
 vision-squeezer path/to/image.jpg \
-  --mode auto|ocr|standard \      # default: auto (detects text/grayscale)
+  --mode auto|ocr|standard \      # default: auto (= standard, keeps colour; ocr is opt-in)
   --format jpeg|webp|avif \       # default: jpeg
   --quality 85 \                  # output quality 1-100 (default: 75)
   --tile-size 256 \               # patch size in px (default: 512)
@@ -275,7 +275,8 @@ vision-squeezer path/to/image.jpg \
   --auto-quality 0.95 \           # binary-search quality to hit SSIM target
   --bg-tolerance 25 \             # background detection 0-255 (default: 15)
   --model <provider-alias> \ # model-aware resizing; see the model catalog
-  --max-tiles 20 \                # hard cap on tile count
+  --max-tokens 1600 \            # token budget: downscale until the output fits (0 = off; MCP default 1600)
+  --max-tiles 20 \                # hard cap on tile count (model-specific unit)
   --json \                        # machine-readable JSON output
   --dry-run                       # run pipeline, skip disk write
 ```
@@ -338,7 +339,7 @@ Legacy `gpt4o` and `gpt5` profiles remain available for endpoints that still use
 Input image
   → crop_padding               remove solid-color borders
   → calculate_optimal_dims     snap to tile boundary (always down)
-  → [enforce_max_tiles]        optional tile budget cap
+  → [enforce_max_tokens]       token budget (MCP default 1600) / optional tile cap
   → resize_exact               Lanczos3
   → [binarize]                 OCR mode only: Otsu threshold
   → JPEG/WebP encode           configurable quality & format
@@ -354,157 +355,77 @@ VisionSqueezer is a performance-critical middleware. We chose Rust for three unc
 
 ---
 
-### Legacy benchmark snapshots
+### Benchmark snapshots
 
-The snapshots below were captured with the pre-patch-token estimator and are retained only as historical compression examples. Use `--json --dry-run` for current GPT-6/Claude 4.7 token estimates.
+Captured with `vision-squeezer <image> [flags] --dry-run --json` on the sample images in `data/`. **The goal is fewer tokens, not fewer megabytes**: providers bill by pixel dimensions, so file size only matters for upload and latency. Without a budget the pipeline snaps to a grid and crops padding, which saves little on large photos because providers already downscale oversized images themselves. A token budget (`--max-tokens`, default **1600** in the MCP server) is what makes the saving real.
 
-### Case Study 1: Standard Image (istanbul.jpg)
-To demonstrate the impact on standard images, here is the run on a 2400×1670 image (4 MP, 0.5 MB) across the three scenarios:
+### Case Study 1: Standard image (istanbul.jpg)
+2400×1670, 0.5 MB.
 
-#### Example 1: Agnostic Optimization (Default)
-When no target model is specified, Squeezer reduces the file size and mathematically optimizes boundaries to be generally efficient across all models.
+| Run | Output | File size | Claude 4.7+ tokens | GPT-6 tokens | Gemini tokens |
+|---|---|---|---|---|---|
+| *no budget* (pre-0.7 default) | 2048×1536 | −29% | 4,674 → 4,070 (−13%) | 2,903 → 2,942 | 3,096 → 1,548 (−50%) |
+| `--max-tokens 1600` (MCP default) | 1344×924 | −67% | 4,674 → 1,584 (−66%) | 2,903 → 1,462 (−50%) | 3,096 → 1,032 (−67%) |
+| `--max-tokens 1000` | 1064×728 | −79% | 4,674 → 988 (−79%) | 2,903 → 939 (−68%) | 3,096 → 516 (−83%) |
+| `--max-tokens 1600 --model gpt6` | 1408×960 | −65% | 4,674 → 1,785 (−62%) | 2,903 → 1,584 (−45%) | 3,096 → 1,032 (−67%) |
+| `--max-tokens 1600 --model gemini` | 2304×1536 | −22% | 4,674 → 4,565 (−2%) | 2,903 → 2,880 (−1%) | 3,096 → 1,548 (−50%) |
 
 ```bash
-vision-squeezer data/istanbul.jpg
+vision-squeezer data/istanbul.jpg --max-tokens 1600
 ```
 ```text
 Input:  2400×1670  (0.5 MB)
-Output: 2048×1536  (0.3 MB, JPG q75)
-File:   28.6% smaller
+Output: 1344×924  (0.2 MB, JPG q75)
+File:   67.5% smaller
 
 ── Token Estimates ─────────────────────────────────────────
 Model          Before    After      Saved
 ------------------------------------------
-Claude           5344     4194     1150 (21.5%)
-GPT-4o           1105      765      340 (30.8%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           3096     1548     1548 (50.0%)
-────────────────────────────────────────────────────────────
-```
-
-<details>
-<summary><b>View Advanced Model-Targeted Optimizations (GPT-4o & Claude)</b></summary>
-
-### Example 2: Model-Targeted Optimization (GPT-4o)
-If you tell Squeezer the target model, it reverses the model's exact internal calculation (e.g. GPT-4.5's 768px short-side scaling algorithm) and mathematically shrinks the image just enough to fit the absolute minimum tile grid.
-
-```bash
-vision-squeezer data/istanbul.jpg --model gpt4o
-```
-```text
-Input:  2400×1670  (0.5 MB)
-Output: 2399×1200  (0.3 MB, JPG q75)
-File:   33.6% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude           5344     3838     1506 (28.2%)
+Claude 4.7+      4674     1584     3090 (66.1%)
+GPT-6            2903     1462     1441 (49.6%)
 GPT-4o           1105     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           3096     2064     1032 (33.3%)
+GPT-5             910      910        0 (0.0%)
+Gemini           3096     1032     2064 (66.7%)
 ────────────────────────────────────────────────────────────
 ```
-*Notice how targeting `gpt4o` perfectly fits the image into a solid 6-tile boundary (2399x1200) mathematically calculated backwards from OpenAI's short-side scaling algorithm. It maximizes resolution exactly up to the point where an extra tile would be billed.*
 
-### Example 3: Model-Targeted Optimization (Claude)
-This historical run used Claude's former area estimator; current releases use the 28px patch model documented above.
+### Case Study 2: 12-megapixel image (istanbul2.jpg)
+4096×3072, 2.2 MB.
 
-```bash
-vision-squeezer data/istanbul.jpg --model claude
-```
-```text
-Input:  2400×1670  (0.5 MB)
-Output: 2304×1536  (0.4 MB, JPG q75)
-File:   21.3% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude           5344     4718      626 (11.7%)
-GPT-4o           1105     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           3096     1548     1548 (50.0%)
-────────────────────────────────────────────────────────────
-```
-*Claude benefits tremendously from even minor dimension reductions. By snapping the width and height slightly downwards, we immediately shaved off over 600 tokens while preserving the massive 2304×1536 resolution.*
-
-</details>
-
-### Case Study 2: 12-Megapixel High-Res Image (istanbul2.jpg)
-To demonstrate the impact on massive images, here is the run on a 4096×3072 image (12 MP, 2.2 MB) across the three scenarios:
-
-#### Example 1: Agnostic Optimization
+| Run | Output | File size | Claude 4.7+ tokens | GPT-6 tokens | Gemini tokens |
+|---|---|---|---|---|---|
+| *no budget* (pre-0.7 default) | 3584×2560 | −40% | 4,661 → 4,698 | 2,942 → 2,924 (−1%) | 6,192 → 5,160 (−17%) |
+| `--max-tokens 1600` (MCP default) | 1288×952 | −88% | 4,661 → 1,564 (−66%) | 2,942 → 1,476 (−50%) | 6,192 → 1,032 (−83%) |
+| `--max-tokens 1000` | 1036×756 | −92% | 4,661 → 999 (−79%) | 2,942 → 951 (−68%) | 6,192 → 516 (−92%) |
+| `--max-tokens 1600 --model gpt6` | 1344×992 | −87% | 4,661 → 1,728 (−63%) | 2,942 → 1,563 (−47%) | 6,192 → 1,032 (−83%) |
+| `--max-tokens 1600 --model gemini` | 2304×1536 | −71% | 4,661 → 4,565 (−2%) | 2,942 → 2,880 (−2%) | 6,192 → 1,548 (−75%) |
 
 ```bash
-vision-squeezer data/istanbul2.jpg
+vision-squeezer data/istanbul2.jpg --max-tokens 1600
 ```
 ```text
 Input:  4096×3072  (2.2 MB)
-Output: 3584×2560  (1.3 MB, JPG q75)
-File:   39.6% smaller
+Output: 1288×952  (0.3 MB, JPG q75)
+File:   87.9% smaller
 
 ── Token Estimates ─────────────────────────────────────────
 Model          Before    After      Saved
 ------------------------------------------
-Claude          16777    12233     4544 (27.1%)
+Claude 4.7+      4661     1564     3097 (66.4%)
+GPT-6            2942     1476     1466 (49.8%)
 GPT-4o            765     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           6192     5160     1032 (16.7%)
+GPT-5             630      910        0 (0.0%)
+Gemini           6192     1032     5160 (83.3%)
 ────────────────────────────────────────────────────────────
 ```
-*(Notice the **OpenAI Aspect Ratio Anomaly**: Squeezer removed heavy letterboxing (padding) from this image. By removing the padding, the image became "wider". Because OpenAI's API forces the *new* short side to 768px, the wide aspect ratio pushed the long side into a 3rd tile grid column! This is a fascinating edge case where cropping padding mathematically INCREASES your GPT-4o token cost. If you specifically use `--model gpt4o` on this image, Squeezer will detect this paradox and use a different grid constraint).*
 
-<details>
-<summary><b>View Advanced Model-Targeted Optimizations (GPT-4o & Claude)</b></summary>
+### Reading the numbers
 
-#### Example 2: Model-Targeted Optimization (GPT-4o)
-
-```bash
-vision-squeezer data/istanbul2.jpg --model gpt4o
-```
-```text
-Input:  4096×3072  (2.2 MB)
-Output: 4095×2048  (1.2 MB, JPG q75)
-File:   43.2% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude          16777    11182     5595 (33.3%)
-GPT-4o            765     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           6192     4644     1548 (25.0%)
-────────────────────────────────────────────────────────────
-```
-*(By explicitly targeting `gpt4o`, Squeezer optimizes the boundaries such that the new aspect ratio is safely contained. While GPT-4o still bills for the 6-tile layout due to the image's inherent width, Squeezer shrinks the file footprint by 43% without sacrificing high-resolution details.)*
-
-#### Example 3: Model-Targeted Optimization (Claude)
-
-```bash
-vision-squeezer data/istanbul2.jpg --model claude
-```
-```text
-Input:  4096×3072  (2.2 MB)
-Output: 3840×2816  (1.5 MB, JPG q75)
-File:   31.5% smaller
-
-── Token Estimates ─────────────────────────────────────────
-Model          Before    After      Saved
-------------------------------------------
-Claude          16777    14417     2360 (14.1%)
-GPT-4o            765     1105        0 (0.0%)
-GPT-5            1536     1536        0 (0.0%)
-Gemini           6192     5160     1032 (16.7%)
-────────────────────────────────────────────────────────────
-```
-*(Historical estimator output; current Claude estimates use the 28px patch profile.)*
-
-> **💡 FAQ: Wait, why did targeting `gpt4o` save 33% of Claude tokens, but targeting `claude` only saved 14%?**
-> *Because of the **Quality vs. Aggression trade-off**. OpenAI enforces a strict maximum internal resolution (2048px). When you target `gpt4o`, Squeezer must aggressively squash the massive 4096px image down to fit OpenAI's constraints (4095x2048). This massive loss in total pixel area mathematically translates to a huge token drop for Claude.*
-> *However, Claude has **no such maximum limits**. When you explicitly target `claude`, Squeezer knows it doesn't need to destroy your image's resolution. It carefully keeps the massive 3840x2816 size to preserve ultra-fine detail, only trimming the absolute minimum padding to give you the most cost-efficient **lossless** version possible.*
-
-</details>
+- **Budget off, tokens barely move.** Claude 4.7+ already caps images at 4,784 tokens, so a 4,661-token original can come out at 4,698. The squeezed file is smaller, the bill is not.
+- **`--max-tokens 1600` cuts Claude tokens by ~66% and GPT-6 by ~50%** on both photos while keeping composition, colour and large text. Fine detail (distant windows, small signs) is what goes first.
+- **The budget is measured with the target model**, Claude when none is set. `--model gemini` with the same 1600 lands on Gemini's 768px tile grid (1,032 tokens), and the file-size column follows.
+- **Pick the budget for your content.** 1600 and 1000 kept body text legible in a retina code screenshot; 600 did not. Pass `--max-tokens 0` (or omit it on the CLI) to disable the cap.
+- **Colour is never dropped.** `auto` mode behaves like `standard`; black-and-white output only happens with an explicit `--mode ocr`.
 
 ---
 
@@ -516,18 +437,6 @@ Gemini           6192     5160     1032 (16.7%)
 | GPT-6 / GPT-5.6 | 2048×2048 | 3,000 after the 2,500-patch cap |
 | Claude 4.7+ | 1000×1000 | 1,296 |
 | Legacy GPT-5 / 5.1 | 1024×1024 | 630 |
-
-## Legacy benchmark / savings
-
-Historical pre-patch-token results. Run `vision-squeezer <image> --model gpt6 --json --dry-run` for current numbers.
-
-| Original Size | Model | Tokens Before | Tokens After | Saved |
-|---------------|-------|---------------|--------------|-------|
-| **1025 × 1025**<br>*(Screenshot)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 1,400<br>425<br>1,032 | 1,024<br>255<br>258 | **26.8%**<br>40.0%<br>75.0% |
-| **4032 × 3024**<br>*(Phone Camera)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 16,257<br>2,125<br>6,192 | 12,232<br>1,745<br>4,128 | **24.8%**<br>17.9%<br>33.3% |
-| **800 × 600**<br>*(Web Image)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 640<br>255<br>1,032 | 341<br>255<br>258 | **46.7%**<br>0.0%<br>75.0% |
-
-*(Legacy snapshot; current OpenAI integrations should use `gpt6`.)*
 
 ---
 
@@ -542,6 +451,7 @@ Historical pre-patch-token results. Run `vision-squeezer <image> --model gpt6 --
 | `tile_size` | integer | — | 512 |
 | `crop` | boolean | — | true |
 | `bg_tolerance` | integer 0–255 | — | 15 |
+| `max_tokens` | integer | — | 1600 (`0` disables the cap) |
 | `max_tiles` | integer | — | — |
 | `target_model` | string enum | — | Core models plus `glm`, `pixtral`, `gemma`, `internvl`, `minicpm`, `molmo`, `aya`, `phi4`, `granite`, `llava`, `falcon`, `minimax`, `step`, `ling`, `voyage` |
 

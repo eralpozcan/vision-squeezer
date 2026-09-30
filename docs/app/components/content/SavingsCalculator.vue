@@ -1,49 +1,51 @@
 <script setup lang="ts">
 type Stat = { val: string, pct: string, sub: string, hl: boolean }
-type Target = { claude: Stat, gpt4o: Stat, file: { val: string, sub: string }, note: string }
-type Source = { desc: string, agnostic: Target, gpt4o: Target, claude: Target }
+type Target = { claude: Stat, gpt6: Stat, file: { val: string, sub: string }, note: string }
+type SourceKey = 'standard' | 'highres'
+type TargetKey = 'off' | 'b1600' | 'b1000'
+type Source = { desc: string } & Record<TargetKey, Target>
 
-const benchmarkData: Record<'standard' | 'highres', Source> = {
+const benchmarkData: Record<SourceKey, Source> = {
   standard: {
-    desc: 'Optimizing a standard 2400x1670 screenshot.',
-    agnostic: {
-      claude: { val: '1,150', pct: '-21.5%', sub: '5,344 → 4,194 tokens', hl: true },
-      gpt4o: { val: '340', pct: '-30.8%', sub: '1,105 → 765 tokens', hl: true },
-      file: { val: '28.6%', sub: '0.5MB → 0.3MB' },
-      note: 'When no target is specified, Squeezer reduces file size and mathematically optimizes boundaries to be generally efficient across all models.'
+    desc: 'Optimizing a 2400x1670 photograph (4MP).',
+    off: {
+      claude: { val: '604', pct: '-13%', sub: '4,674 → 4,070 tokens', hl: true },
+      gpt6: { val: '0', pct: '0%', sub: '2,903 → 2,942 tokens', hl: false },
+      file: { val: '29%', sub: '0.5MB → 0.4MB' },
+      note: 'No budget (the pre-0.7 default): Squeezer snaps to the provider grid and strips padding. Large photos barely change because providers already downscale oversized images themselves.'
     },
-    gpt4o: {
-      claude: { val: '1,506', pct: '-28.2%', sub: '5,344 → 3,838 tokens', hl: false },
-      gpt4o: { val: 'Maximum', pct: 'Locked', sub: 'Perfectly locked to 6 tiles', hl: true },
-      file: { val: '33.6%', sub: '0.5MB → 0.3MB' },
-      note: 'Targeting GPT-4o perfectly fits the image into a solid 6-tile boundary (2399x1200) mathematically calculated backwards from OpenAI\'s short-side scaling algorithm.'
+    b1600: {
+      claude: { val: '3,090', pct: '-66%', sub: '4,674 → 1,584 tokens', hl: true },
+      gpt6: { val: '1,441', pct: '-50%', sub: '2,903 → 1,462 tokens', hl: true },
+      file: { val: '67%', sub: '0.5MB → 0.2MB' },
+      note: 'Budget 1600 (the MCP default): the image is downscaled until Claude\'s estimate fits. Composition, colour and large text survive; fine detail goes first.'
     },
-    claude: {
-      claude: { val: '626', pct: '-11.7%', sub: '5,344 → 4,718 tokens', hl: true },
-      gpt4o: { val: '0', pct: '0%', sub: '1,105 → 1,105 tokens', hl: false },
-      file: { val: '21.3%', sub: '0.5MB → 0.4MB' },
-      note: 'By targeting Claude, Squeezer preserves the massive 2304x1536 resolution and solely trims solid padding, minimizing token cost via Claude\'s area-based formula.'
+    b1000: {
+      claude: { val: '3,686', pct: '-79%', sub: '4,674 → 988 tokens', hl: true },
+      gpt6: { val: '1,964', pct: '-68%', sub: '2,903 → 939 tokens', hl: true },
+      file: { val: '79%', sub: '0.5MB → 0.1MB' },
+      note: 'Budget 1000: more aggressive. Body text in a retina code screenshot stayed legible in testing; around 600 it did not.'
     }
   },
   highres: {
-    desc: 'Optimizing a massive 4096x3072 photograph (12MP).',
-    agnostic: {
-      claude: { val: '4,544', pct: '-27.1%', sub: '16,777 → 12,233 tokens', hl: true },
-      gpt4o: { val: '0', pct: 'Anomaly', sub: 'OpenAI Grid Paradox Detected', hl: false },
-      file: { val: '39.6%', sub: '2.2MB → 1.3MB' },
-      note: 'Notice the OpenAI Aspect Ratio Anomaly: Removing padding made the image \'wider\', which ironically pushes the long-side into a new OpenAI grid row! (Use --model gpt4o to fix).'
+    desc: 'Optimizing a 4096x3072 photograph (12MP).',
+    off: {
+      claude: { val: '0', pct: '0%', sub: '4,661 → 4,698 tokens', hl: false },
+      gpt6: { val: '18', pct: '-1%', sub: '2,942 → 2,924 tokens', hl: true },
+      file: { val: '40%', sub: '2.3MB → 1.4MB' },
+      note: 'No budget (the pre-0.7 default): Squeezer snaps to the provider grid and strips padding. Large photos barely change because providers already downscale oversized images themselves.'
     },
-    gpt4o: {
-      claude: { val: '5,595', pct: '-33.3%', sub: '16,777 → 11,182 tokens', hl: false },
-      gpt4o: { val: 'Maximum', pct: 'Locked', sub: 'Grid boundary perfectly contained', hl: true },
-      file: { val: '43.2%', sub: '2.2MB → 1.2MB' },
-      note: 'By explicitly targeting gpt4o, Squeezer optimizes the boundaries such that the new aspect ratio is safely contained. File footprint shrinks by 43%.'
+    b1600: {
+      claude: { val: '3,097', pct: '-66%', sub: '4,661 → 1,564 tokens', hl: true },
+      gpt6: { val: '1,466', pct: '-50%', sub: '2,942 → 1,476 tokens', hl: true },
+      file: { val: '88%', sub: '2.3MB → 0.3MB' },
+      note: 'Budget 1600 (the MCP default): the image is downscaled until Claude\'s estimate fits. Composition, colour and large text survive; fine detail goes first.'
     },
-    claude: {
-      claude: { val: '2,360', pct: '-14.1%', sub: '16,777 → 14,417 tokens', hl: true },
-      gpt4o: { val: '0', pct: '0%', sub: '765 → 1,105 (Padding trim anomaly)', hl: false },
-      file: { val: '31.5%', sub: '2.2MB → 1.5MB' },
-      note: 'Squeezer refuses to aggressively downscale (like GPT requires), instead carefully trimming padding to preserve 10+ Megapixels of ultra-fine detail.'
+    b1000: {
+      claude: { val: '3,662', pct: '-79%', sub: '4,661 → 999 tokens', hl: true },
+      gpt6: { val: '1,991', pct: '-68%', sub: '2,942 → 951 tokens', hl: true },
+      file: { val: '92%', sub: '2.3MB → 0.2MB' },
+      note: 'Budget 1000: more aggressive. Body text in a retina code screenshot stayed legible in testing; around 600 it did not.'
     }
   }
 }
@@ -54,13 +56,13 @@ const sources = [
 ] as const
 
 const targets = [
-  { val: 'agnostic', label: 'Agnostic' },
-  { val: 'gpt4o', label: 'GPT-4o' },
-  { val: 'claude', label: 'Claude' }
+  { val: 'off', label: 'No budget' },
+  { val: 'b1600', label: '1600 tokens' },
+  { val: 'b1000', label: '1000 tokens' }
 ] as const
 
-const currentImage = ref<'standard' | 'highres'>('standard')
-const currentTarget = ref<'agnostic' | 'gpt4o' | 'claude'>('agnostic')
+const currentImage = ref<SourceKey>('standard')
+const currentTarget = ref<TargetKey>('b1600')
 
 const data = computed(() => benchmarkData[currentImage.value][currentTarget.value])
 const targetName = computed(() => targets.find(t => t.val === currentTarget.value)!.label)
@@ -88,7 +90,7 @@ const desc = computed(() => benchmarkData[currentImage.value].desc)
       </div>
       <div>
         <p class="text-sm font-medium text-muted mb-2">
-          Optimization Target
+          Token budget
         </p>
         <div class="flex gap-1 rounded-lg bg-default p-1">
           <button
@@ -107,7 +109,7 @@ const desc = computed(() => benchmarkData[currentImage.value].desc)
     <hr class="my-6 border-default">
 
     <p class="text-sm text-muted mb-4">
-      {{ desc }} Target: <b class="text-default">{{ targetName }}</b>.
+      {{ desc }} Budget: <b class="text-default">{{ targetName }}</b>.
     </p>
 
     <div class="grid sm:grid-cols-3 gap-4">
@@ -127,16 +129,16 @@ const desc = computed(() => benchmarkData[currentImage.value].desc)
       </div>
       <div
         class="rounded-lg border p-4 transition-colors"
-        :class="data.gpt4o.hl ? 'border-primary bg-primary/5' : 'border-default'"
+        :class="data.gpt6.hl ? 'border-primary bg-primary/5' : 'border-default'"
       >
         <h4 class="text-xs font-medium text-muted uppercase tracking-wide">
-          Tokens Saved (GPT-4o)
+          Tokens Saved (GPT-6)
         </h4>
         <div class="mt-1 text-2xl font-bold text-default">
-          {{ data.gpt4o.val }} <small class="text-base text-muted">({{ data.gpt4o.pct }})</small>
+          {{ data.gpt6.val }} <small class="text-base text-muted">({{ data.gpt6.pct }})</small>
         </div>
         <div class="mt-1 text-xs text-muted">
-          {{ data.gpt4o.sub }}
+          {{ data.gpt6.sub }}
         </div>
       </div>
       <div class="rounded-lg border border-default p-4">
