@@ -28,8 +28,6 @@ useSeoMeta({
   ogSiteName: seo?.siteName,
   ogUrl: canonicalUrl,
   ogLocale: 'en_US',
-  twitterTitle: () => seo?.siteName,
-  twitterDescription: 'AI vision token optimization middleware and MCP server for image-aware models.',
   twitterCard: 'summary_large_image'
 })
 

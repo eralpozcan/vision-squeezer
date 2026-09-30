@@ -7,10 +7,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.7.0] - 2026-10-01
 
 ### Added
 - **Token budget: `max_tokens`.** `ProcessConfig::max_tokens`, `--max-tokens N` on the CLI and a `max_tokens` argument on the MCP `optimize_image` tools. The image is downscaled until the target model's token estimate fits (Claude when no `target_model` is set). **The MCP server now defaults to 1600**; pass `0` to disable. On the sample photos this cuts Claude 4.7+ tokens by ~66% and GPT-6 by ~50%; before, token counts barely moved and file size was the only real saving.
+
+- **Token budget guide** at `/guides/token-budget`: defaults, measured savings, how to pick a budget, and caveats.
 
 ### Changed
 - **`auto` mode no longer binarizes.** It used to switch to Otsu black-and-white when under 10% of pixels were coloured, which erased error highlights and chart colours and saved bytes, not tokens. `auto` now behaves like `standard`; black-and-white output needs an explicit `mode: ocr`. `detect_ocr_mode` stays exported but is no longer called by `process()`.
@@ -19,6 +21,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - **Savings report uses the budget model.** With a budget and no target model, `tiles_before`/`tiles_after` and `token_reduction_pct` are measured with Claude instead of 512px tiles.
 - **`mcp-publish.yml` runs after `Release` succeeds** (`workflow_run`) instead of on the tag push. The registry checks that the npm version exists, and the tag-push trigger raced `npm publish` (v0.6.2 failed with a 404).
 - **Project instructions moved to `AGENTS.md`**; `CLAUDE.md` imports it with `@AGENTS.md`.
+- **Docs SEO.** Keyword titles and longer descriptions for the thin pages (install, CLI options, usage, batch, catalog, Python), a landing description under 160 characters, and per-page `twitter:title` / `twitter:description` instead of one site-wide value. The hero no longer claims "up to 90%" or "without losing visual detail".
 - **README and docs benchmarks regenerated** for the current models and the budget workflow. The docs savings calculator now compares no budget / 1600 / 1000 tokens (GPT-6 instead of GPT-4o); `--max-tokens`, `--mode` and the MCP `max_tokens` argument are documented.
 
 ## [0.6.1] - 2026-07-21

@@ -1,7 +1,7 @@
 ---
 seo:
   title: VisionSqueezer — Stop Leaking Vision Tokens
-  description: LLM-native image optimization middleware & MCP server. Mathematically snaps images to Claude, GPT, and Gemini grid boundaries to cut vision token usage by up to 90%.
+  description: LLM-native image optimization middleware & MCP server. Fits images to a token budget for Claude, GPT, and Gemini, cutting vision tokens by about 66%.
 ---
 
 ::u-page-hero{class="dark:bg-gradient-to-b from-neutral-900 to-neutral-950"}
@@ -18,7 +18,7 @@ orientation: horizontal
 Stop Leaking [Vision Tokens]{.text-primary}.
 
 #description
-The LLM-native image optimization middleware. It mathematically snaps your images to Claude, GPT, and Gemini's exact internal grid boundaries to slash token usage by up to 90% — without losing visual detail.
+The LLM-native image optimization middleware. Give it a token budget (1600 by default in the MCP server) and it downsizes images on Claude, GPT, and Gemini's exact grid boundaries. About 66% fewer Claude tokens on our sample photos, with composition, colour, and large text intact.
 
 #links
   :::u-button
@@ -62,6 +62,18 @@ The Math Behind the Magic
 Every provider tokenizes images differently. Squeezer simulates each provider's internal grid math and snaps your images to the cheapest valid boundary.
 
 #features
+  :::u-page-feature
+  ---
+  icon: i-lucide-gauge
+  to: /guides/token-budget
+  ---
+  #title
+  Token budget
+
+  #description
+  `--max-tokens N` downscales until the target model's estimate fits. The MCP server defaults to 1600, about 66% fewer Claude tokens and 50% fewer GPT-6 tokens on the sample photos.
+  :::
+
   :::u-page-feature
   ---
   icon: i-lucide-square

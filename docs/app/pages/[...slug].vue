@@ -28,7 +28,9 @@ useSeoMeta({
   title,
   ogTitle: title,
   description,
-  ogDescription: description
+  ogDescription: description,
+  twitterTitle: title,
+  twitterDescription: description
 })
 
 const headline = computed(() => findPageHeadline(navigation?.value, page.value?.path))

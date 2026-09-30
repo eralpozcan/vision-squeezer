@@ -12,7 +12,9 @@ useSeoMeta({
   title,
   ogTitle: title,
   description,
-  ogDescription: description
+  ogDescription: description,
+  twitterTitle: title,
+  twitterDescription: description
 })
 
 defineOgImage('Docs', { title, description })
@@ -26,7 +28,7 @@ useHead({
       'name': 'VisionSqueezer',
       'operatingSystem': 'Any',
       'applicationCategory': 'DeveloperApplication',
-      'description': 'LLM-native image optimization middleware and MCP server that mathematically snaps images to exact grid boundaries for Claude, GPT, and Gemini to reduce token usage.',
+      'description': 'LLM-native image optimization middleware and MCP server that fits images to a token budget and snaps them to exact grid boundaries for Claude, GPT, and Gemini to reduce vision token usage.',
       'offers': { '@type': 'Offer', 'price': '0', 'priceCurrency': 'USD' },
       'url': 'https://visionsqueezer.com',
       'sameAs': [
