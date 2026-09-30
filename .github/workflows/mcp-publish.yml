@@ -5,20 +5,28 @@ name: MCP Registry
 # repo's id-token, so no secret is needed. Kept separate from release.yml so a
 # registry-only publish (or a re-run after a server.json fix) never has to
 # re-run crates.io / npm, which reject an already-published version.
+#
+# Runs after Release succeeds: the registry verifies the npm version in
+# server.json exists, and Release is what publishes it. Triggering on the tag
+# push directly raced npm publish and failed with a 404 (v0.6.2).
 on:
-  push:
-    tags: ["v*"]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
   publish:
     name: Publish to MCP Registry
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - name: Install mcp-publisher
         run: curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_linux_amd64.tar.gz" | tar -xz mcp-publisher
       - name: Login (GitHub OIDC) and publish
