@@ -103,14 +103,18 @@ impl ProcessConfigBuilder {
 
 // ── Token Estimation ──────────────────────────────────────────────────────────
 
-/// Supported vision model families with their patch pricing.
+/// Supported vision model families with exact or explicitly advisory profiles.
 #[derive(Clone, Copy, Debug)]
 pub enum VisionModel {
-    /// Claude 3.5/4.5/4.6/4.7: Area-based calculation (Tokens ≈ width × height / 750).
+    /// Claude 4.7+ high-resolution vision: 28×28 patches, 2576px edge / 4784-token budget.
     Claude,
+    /// Earlier Claude vision models: 28×28 patches, 1568px edge / 1568-token budget.
+    ClaudeStandard,
+    /// Current OpenAI vision models (GPT-6 / GPT-5.6): 32×32 patches with a 1.2 multiplier.
+    Gpt6,
     /// GPT-4o / GPT-4.5 high detail: fits in 2048x2048, scales short side to 768, then 512x512 tiles.
     Gpt4o,
-    /// GPT-5/5.5: 6000px max dim, 10.24M max pixels, 512×512 tiles, 1536 token cap.
+    /// Legacy GPT-5/5.1 high detail: 70 base tokens + 140 per 512×512 tile.
     Gpt5,
     /// Gemini 2.0/3.0: flat 258 tokens if ≤ 384x384, else 258 per 768x768 tile.
     Gemini15,
@@ -121,6 +125,101 @@ pub enum VisionModel {
     QwenVl,
     /// DeepSeek-VL2: 384×384 base + dynamic 384 local tiles (open-weights; value is local-context savings).
     DeepseekVl,
+    /// DeepSeek Flash API: current multimodal endpoint, capped at 384 image tokens per image.
+    DeepseekFlash,
+    /// Kimi K2.5/K2.6/K3 native vision. Moonshot does not publish a fixed billing grid; estimate is advisory.
+    KimiVision,
+    /// Popular open/API vision families without a stable public billing grid.
+    /// Estimates are advisory; resizing remains useful and deterministic.
+    GenericVision,
+}
+
+impl VisionModel {
+    /// Parse the model aliases accepted by the CLI, MCP server, and Python binding.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "claude" | "claude-high" | "claude-4.7" => Some(Self::Claude),
+            "claude-standard" => Some(Self::ClaudeStandard),
+            "openai" | "gpt6" | "gpt-6" | "gpt6-astra" | "gpt-6-astra" | "gpt5.6" | "gpt-5.6"
+            | "gpt5.5" | "gpt-5.5" => Some(Self::Gpt6),
+            "gpt4o" | "gpt-4o" => Some(Self::Gpt4o),
+            "gpt5" | "gpt-5" | "gpt5.1" | "gpt-5.1" => Some(Self::Gpt5),
+            "gemini" | "gemini-3" | "gemini-3.8" => Some(Self::Gemini15),
+            "llama" | "llama-vision" => Some(Self::LlamaVision),
+            "qwen" | "qwen-vl" | "qwen3-vl" => Some(Self::QwenVl),
+            "deepseek-local" | "deepseek-vl" | "deepseek-vl2" => Some(Self::DeepseekVl),
+            "deepseek" | "deepseek-flash" | "deepseek-v4-flash-vision-exp" => {
+                Some(Self::DeepseekFlash)
+            }
+            "kimi" | "kimi-vision" | "kimi-k2.5" | "kimi-k2.6" | "kimi-k3" => {
+                Some(Self::KimiVision)
+            }
+            "glm"
+            | "glm-4v"
+            | "glm-4.5v"
+            | "glm-5.3-flash"
+            | "mistral"
+            | "pixtral"
+            | "pixtral-large"
+            | "pixtral-12b"
+            | "gemma"
+            | "gemma-3"
+            | "gemma-4"
+            | "gemma-4-31b"
+            | "internvl"
+            | "internvl2"
+            | "internvl2.5"
+            | "internvl3"
+            | "minicpm"
+            | "minicpm-v"
+            | "minicpm-o"
+            | "molmo"
+            | "molmo2"
+            | "aya"
+            | "aya-vision"
+            | "phi4"
+            | "phi-4"
+            | "phi-4-multimodal"
+            | "granite"
+            | "granite-vision"
+            | "llava"
+            | "llava-onevision"
+            | "llava-next"
+            | "falcon"
+            | "falcon-vision"
+            | "falcon-ocr"
+            | "minimax"
+            | "minimax-vl"
+            | "minimax-m3"
+            | "step"
+            | "step-3.7"
+            | "step-3.7-flash"
+            | "ling"
+            | "ling-vision"
+            | "ling-3.0-flash-vl"
+            | "voyage"
+            | "voyage-multimodal"
+            | "voyage-multimodal-3.5" => Some(Self::GenericVision),
+            _ => None,
+        }
+    }
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Claude => "Claude 4.7+",
+            Self::ClaudeStandard => "Claude (standard)",
+            Self::Gpt6 => "GPT-6 / GPT-5.6",
+            Self::Gpt4o => "GPT-4o",
+            Self::Gpt5 => "GPT-5 / 5.1 (legacy)",
+            Self::Gemini15 => "Gemini 3",
+            Self::LlamaVision => "Llama Vision",
+            Self::QwenVl => "Qwen-VL",
+            Self::DeepseekVl => "DeepSeek-VL",
+            Self::DeepseekFlash => "DeepSeek Flash",
+            Self::KimiVision => "Kimi Vision",
+            Self::GenericVision => "Generic vision (advisory)",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -134,12 +233,30 @@ pub struct TokenEstimate {
 pub fn estimate_tokens(width: u32, height: u32, model: VisionModel) -> TokenEstimate {
     match model {
         VisionModel::Claude => {
-            // 2026 area-based pricing for Claude
-            let tokens = ((width as u64 * height as u64) / 750) as u32;
+            let (w, h) = fit_within_patch_budget(width, height, 2576, 4784, 28);
+            let patches = patch_count(w, h, 28);
             TokenEstimate {
                 model,
-                tiles: 1,
-                tokens: tokens.max(85),
+                tiles: patches,
+                tokens: patches,
+            }
+        }
+        VisionModel::ClaudeStandard => {
+            let (w, h) = fit_within_patch_budget(width, height, 1568, 1568, 28);
+            let patches = patch_count(w, h, 28);
+            TokenEstimate {
+                model,
+                tiles: patches,
+                tokens: patches,
+            }
+        }
+        VisionModel::Gpt6 => {
+            let (w, h) = fit_within_patch_budget(width, height, 2048, 2500, 32);
+            let patches = patch_count(w, h, 32);
+            TokenEstimate {
+                model,
+                tiles: patches,
+                tokens: (patches * 12).div_ceil(10),
             }
         }
         VisionModel::Gpt4o => {
@@ -159,12 +276,18 @@ pub fn estimate_tokens(width: u32, height: u32, model: VisionModel) -> TokenEsti
             }
         }
         VisionModel::Gpt5 => {
-            let (w, h) = fit_within_pixels(width, height, 6000, 10_240_000);
+            let (mut w, mut h) = fit_within(width, height, 2048);
+            let short_side = w.min(h);
+            if short_side > 768 {
+                let scale = 768.0 / short_side as f64;
+                w = (w as f64 * scale).round() as u32;
+                h = (h as f64 * scale).round() as u32;
+            }
             let tiles = tile_count(w, 512) * tile_count(h, 512);
             TokenEstimate {
                 model,
                 tiles,
-                tokens: (85 + tiles * 170).min(1536),
+                tokens: 70 + tiles * 140,
             }
         }
         VisionModel::Gemini15 => {
@@ -241,6 +364,33 @@ pub fn estimate_tokens(width: u32, height: u32, model: VisionModel) -> TokenEsti
                 tokens: global + local,
             }
         }
+        VisionModel::DeepseekFlash => TokenEstimate {
+            model,
+            tiles: 1,
+            tokens: 384,
+        },
+        VisionModel::KimiVision => {
+            // Moonshot exposes native-resolution vision but no public image billing grid.
+            // Keep this estimate advisory and use a conservative 28px effective grid.
+            let (w, h) = fit_within(width, height, 4096);
+            let patches = patch_count(w, h, 28);
+            TokenEstimate {
+                model,
+                tiles: patches,
+                tokens: patches,
+            }
+        }
+        VisionModel::GenericVision => {
+            // ponytail: one conservative profile for providers without a stable public grid;
+            // split into provider-specific formulas when billing docs become authoritative.
+            let (w, h) = fit_within(width, height, 2048);
+            let patches = patch_count(w, h, 28);
+            TokenEstimate {
+                model,
+                tiles: patches,
+                tokens: patches,
+            }
+        }
     }
 }
 
@@ -268,29 +418,39 @@ pub fn fit_within_pixels(width: u32, height: u32, max_side: u32, max_pixels: u64
     (w.max(1), h.max(1))
 }
 
+fn patch_count(width: u32, height: u32, patch: u32) -> u32 {
+    width.max(1).div_ceil(patch) * height.max(1).div_ceil(patch)
+}
+
+/// Apply a model's edge and patch limits while preserving the image aspect ratio.
+fn fit_within_patch_budget(
+    width: u32,
+    height: u32,
+    max_side: u32,
+    max_patches: u32,
+    patch: u32,
+) -> (u32, u32) {
+    let (mut w, mut h) = fit_within(width.max(1), height.max(1), max_side);
+    let patches = patch_count(w, h, patch);
+    if patches > max_patches {
+        let scale = (max_patches as f64 / patches as f64).sqrt();
+        w = ((w as f64 * scale) as u32 / patch * patch).max(patch);
+        h = ((h as f64 * scale) as u32 / patch * patch).max(patch);
+    }
+    (w, h)
+}
+
 /// Compute the optimal dimensions to *send* to a given model to minimize tiles.
 ///
-/// For models that pre-scale images (GPT-4o, Gemini), we simulate their scaling,
+/// For models that pre-scale images, we simulate their scaling,
 /// snap the scaled result to tile boundaries, then invert back to input space.
-/// For Claude (no pre-scaling), we snap the input directly.
 pub fn optimal_send_dimensions(width: u32, height: u32, model: VisionModel) -> (u32, u32) {
     match model {
-        VisionModel::Claude => {
-            // Claude is now area-based, so tiling doesn't dictate a specific rigid boundary.
-            // But we still snap to 256 or 512 so dimensions aren't completely arbitrary.
-            (
-                snap_to_tile_boundary(width, 256),
-                snap_to_tile_boundary(height, 256),
-            )
-        }
+        VisionModel::Claude => optimal_for_patch_model(width, height, 2576, 4784, 28),
+        VisionModel::ClaudeStandard => optimal_for_patch_model(width, height, 1568, 1568, 28),
+        VisionModel::Gpt6 => optimal_for_patch_model(width, height, 2048, 2500, 32),
         VisionModel::Gpt4o => optimal_for_prescaling_model(width, height, 2048, 512),
-        VisionModel::Gpt5 => {
-            let (fw, fh) = fit_within_pixels(width, height, 6000, 10_240_000);
-            (
-                snap_to_tile_boundary(fw, 512).max(512),
-                snap_to_tile_boundary(fh, 512).max(512),
-            )
-        }
+        VisionModel::Gpt5 => optimal_for_prescaling_model(width, height, 2048, 512),
         VisionModel::Gemini15 => {
             // Gemini uses 768x768 tiles if > 384x384
             if width <= 384 && height <= 384 {
@@ -319,7 +479,30 @@ pub fn optimal_send_dimensions(width: u32, height: u32, model: VisionModel) -> (
                 optimal_for_prescaling_model(width, height, 1152, 384)
             }
         }
+        VisionModel::DeepseekFlash => fit_within(width, height, 2048),
+        VisionModel::KimiVision => {
+            let (w, h) = fit_within(width, height, 4096);
+            (snap_to_tile_boundary(w, 28), snap_to_tile_boundary(h, 28))
+        }
+        VisionModel::GenericVision => {
+            let (w, h) = fit_within(width, height, 2048);
+            (snap_to_tile_boundary(w, 28), snap_to_tile_boundary(h, 28))
+        }
     }
+}
+
+fn optimal_for_patch_model(
+    width: u32,
+    height: u32,
+    max_side: u32,
+    max_patches: u32,
+    patch: u32,
+) -> (u32, u32) {
+    let (w, h) = fit_within_patch_budget(width, height, max_side, max_patches, patch);
+    (
+        snap_to_tile_boundary(w, patch),
+        snap_to_tile_boundary(h, patch),
+    )
 }
 
 /// For models that pre-scale (GPT-4o, Gemini), find the smallest input dimensions
@@ -351,6 +534,8 @@ fn optimal_for_prescaling_model(width: u32, height: u32, max_side: u32, tile: u3
 pub struct TokenSavingsTable {
     pub claude_before: TokenEstimate,
     pub claude_after: TokenEstimate,
+    pub gpt6_before: TokenEstimate,
+    pub gpt6_after: TokenEstimate,
     pub gpt4o_before: TokenEstimate,
     pub gpt4o_after: TokenEstimate,
     pub gpt5_before: TokenEstimate,
@@ -363,6 +548,8 @@ pub fn token_savings_table(orig_w: u32, orig_h: u32, opt_w: u32, opt_h: u32) -> 
     TokenSavingsTable {
         claude_before: estimate_tokens(orig_w, orig_h, VisionModel::Claude),
         claude_after: estimate_tokens(opt_w, opt_h, VisionModel::Claude),
+        gpt6_before: estimate_tokens(orig_w, orig_h, VisionModel::Gpt6),
+        gpt6_after: estimate_tokens(opt_w, opt_h, VisionModel::Gpt6),
         gpt4o_before: estimate_tokens(orig_w, orig_h, VisionModel::Gpt4o),
         gpt4o_after: estimate_tokens(opt_w, opt_h, VisionModel::Gpt4o),
         gpt5_before: estimate_tokens(orig_w, orig_h, VisionModel::Gpt5),
@@ -379,7 +566,8 @@ impl TokenSavingsTable {
             "Model", "Before", "After", "Saved"
         );
         println!("{}", "-".repeat(42));
-        self.print_row("Claude", &self.claude_before, &self.claude_after);
+        self.print_row("Claude 4.7+", &self.claude_before, &self.claude_after);
+        self.print_row("GPT-6", &self.gpt6_before, &self.gpt6_after);
         self.print_row("GPT-4o", &self.gpt4o_before, &self.gpt4o_after);
         self.print_row("GPT-5", &self.gpt5_before, &self.gpt5_after);
         self.print_row("Gemini", &self.gemini_before, &self.gemini_after);
@@ -1170,6 +1358,60 @@ mod tests {
         assert_eq!(r.width, 256); // 257 → snaps down to 256
         assert_eq!(r.tiles_before, 2 * 2); // ceil(257/256)*ceil(512/256) = 2*2
         assert_eq!(r.tiles_after, 1 * 2); // 256/256 * 512/256 = 1*2
+    }
+
+    #[test]
+    fn current_patch_models_match_provider_examples() {
+        let claude = estimate_tokens(1000, 1000, VisionModel::Claude);
+        assert_eq!(claude.tokens, 1296); // ceil(1000 / 28)^2
+
+        let gpt6 = estimate_tokens(1024, 1024, VisionModel::Gpt6);
+        assert_eq!(gpt6.tokens, 1229); // 1024 patches × 1.2, rounded up
+
+        let large_gpt6 = estimate_tokens(2048, 2048, VisionModel::Gpt6);
+        assert_eq!(large_gpt6.tiles, 2500); // resized to 1600×1600
+        assert_eq!(large_gpt6.tokens, 3000);
+    }
+
+    #[test]
+    fn model_aliases_and_legacy_gpt5_pricing_are_stable() {
+        assert!(matches!(
+            VisionModel::parse("gpt-5.6"),
+            Some(VisionModel::Gpt6)
+        ));
+        assert!(matches!(
+            VisionModel::parse("gpt-5.5"),
+            Some(VisionModel::Gpt6)
+        ));
+        assert!(matches!(
+            VisionModel::parse("claude-standard"),
+            Some(VisionModel::ClaudeStandard)
+        ));
+        assert!(matches!(
+            VisionModel::parse("kimi-k2.6"),
+            Some(VisionModel::KimiVision)
+        ));
+        assert!(matches!(
+            VisionModel::parse("deepseek"),
+            Some(VisionModel::DeepseekFlash)
+        ));
+        assert!(matches!(
+            VisionModel::parse("pixtral"),
+            Some(VisionModel::GenericVision)
+        ));
+        assert!(matches!(
+            VisionModel::parse("glm-5.3-flash"),
+            Some(VisionModel::GenericVision)
+        ));
+        assert_eq!(
+            estimate_tokens(1024, 1024, VisionModel::GenericVision).tokens,
+            1369
+        );
+        assert_eq!(
+            estimate_tokens(4096, 4096, VisionModel::DeepseekFlash).tokens,
+            384
+        );
+        assert_eq!(estimate_tokens(1024, 1024, VisionModel::Gpt5).tokens, 630);
     }
 
     #[test]

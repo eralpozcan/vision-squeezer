@@ -7,13 +7,7 @@ use pyo3::types::{PyBytes, PyDict};
 use vision_squeezer as vs;
 
 fn parse_model(s: Option<&str>) -> Option<vs::VisionModel> {
-    s.and_then(|m| match m.to_ascii_lowercase().as_str() {
-        "claude" => Some(vs::VisionModel::Claude),
-        "gpt4o" | "gpt-4o" => Some(vs::VisionModel::Gpt4o),
-        "gpt5" | "gpt-5" | "gpt5.5" => Some(vs::VisionModel::Gpt5),
-        "gemini" => Some(vs::VisionModel::Gemini15),
-        _ => None,
-    })
+    s.and_then(vs::VisionModel::parse)
 }
 
 fn parse_format(s: Option<&str>) -> vs::OutputFormat {

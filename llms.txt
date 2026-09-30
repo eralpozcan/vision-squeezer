@@ -3,7 +3,7 @@
 > LLM-native image optimization middleware & MCP server. Reduces vision model token consumption by mathematically snapping images to provider-specific tile boundaries.
 
 ## Key Features
-- **Provider-Aware Resizing:** Simulate exact internal grid math for Claude (area-based), GPT-4o (512px tiles), and Gemini (768px tiles).
+- **Provider-Aware Resizing:** Current Claude 28px patches, OpenAI GPT-6/GPT-5.6 32px patches, legacy OpenAI tiling, and Gemini 768px tiles.
 - **Padding Stripping:** Aggressive background/solid-color border cropping to minimize wasted pixel area.
 - **Think in Code (Sandbox):** Execute atomic operations (crop, grayscale, binarize, resize) locally before sending to LLM.
 - **Persistent Analytics:** Track token and USD savings in a local SQLite database (`~/.vision-squeezer/stats.db`).

@@ -44,7 +44,7 @@ The LLM-native image optimization middleware. It mathematically snaps your image
 
 #default
   ```bash [terminal]
-  cargo run -- data/image.jpg --model gpt4o
+  cargo run -- data/image.jpg --model gpt6
 
   // Squeezer simulating OpenAI's short-side algorithm...
   Input:  4096×3072  (2.2 MB)
@@ -67,10 +67,10 @@ Every provider tokenizes images differently. Squeezer simulates each provider's 
   icon: i-lucide-square
   ---
   #title
-  Claude (Area-Based)
+  OpenAI GPT-6 / GPT-5.6
 
   #description
-  Claude bills strictly by pixel area `(W × H / 750)`. Every pixel of padding costs you. Squeezer aggressively crops solid borders, shaving thousands of tokens instantly.
+  Current OpenAI models count 32×32 patches with a 2500-patch high-detail budget. Squeezer fits that budget and removes partially used edge patches.
   :::
 
   :::u-page-feature
@@ -78,10 +78,10 @@ Every provider tokenizes images differently. Squeezer simulates each provider's 
   icon: i-lucide-grid-2x2
   ---
   #title
-  GPT-4o (Tiling System)
+  Claude 4.7+ (Patch System)
 
   #description
-  OpenAI forcefully scales the shortest side to 768px, then tiles it. Squeezer simulates this backwards to snap your image right under the exact 512px tile threshold.
+  Claude counts 28×28 patches. Squeezer fits the high-resolution or standard tier and aligns dimensions to the patch grid.
   :::
 
   :::u-page-feature
@@ -186,10 +186,10 @@ Select your agent or editor. Thanks to `npx -y`, zero global installation is req
 
 ::u-page-section
 #title
-GPT-5: What changes?
+Current OpenAI support
 
 #description
-GPT-5 handles up to **10.24 Megapixels** natively (hard cap 1536 tokens). Because of these massive architectural limits, grid-tiling optimization is rarely needed. However, Squeezer still strips heavy padding and compresses file sizes (MBs → KBs) for much faster API uploads and drastically reduced latency.
+Use `--model gpt6` for GPT-6 and GPT-5.6 patch tokenization. The `gpt4o` and `gpt5` profiles remain for legacy endpoints with 512px high-detail tiling.
 ::
 
 ::u-page-section{class="dark:bg-gradient-to-b from-neutral-950 to-neutral-900"}

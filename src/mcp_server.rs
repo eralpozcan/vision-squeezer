@@ -91,7 +91,7 @@ fn tools_list() -> Value {
                         "tile_size": {
                             "type": "integer",
                             "default": 512,
-                            "description": "Model patch size in pixels. 512 for Claude/GPT, 256 for Gemini."
+                            "description": "Custom patch size in pixels; ignored when target_model is set."
                         },
                         "crop": {
                             "type": "boolean",
@@ -112,7 +112,7 @@ fn tools_list() -> Value {
                         },
                         "target_model": {
                             "type": "string",
-                            "enum": ["claude", "gpt4o", "gpt5", "gemini", "llama", "qwen", "deepseek"],
+                            "enum": ["claude", "claude-standard", "gpt6", "gpt4o", "gpt5", "gemini", "llama", "qwen", "deepseek", "deepseek-local", "kimi", "glm", "pixtral", "gemma", "internvl", "minicpm", "molmo", "aya", "phi4", "granite", "llava", "falcon", "minimax", "step", "ling", "voyage"],
                             "description": "Target model family for specialized dimension snapping."
                         }
                     }
@@ -141,7 +141,7 @@ fn tools_list() -> Value {
                                     "crop": { "type": "boolean", "default": true },
                                     "bg_tolerance": { "type": "integer", "minimum": 0, "maximum": 255, "default": 15 },
                                     "max_tiles": { "type": "integer", "minimum": 1 },
-                                    "target_model": { "type": "string", "enum": ["claude", "gpt4o", "gpt5", "gemini", "llama", "qwen", "deepseek"] }
+                                    "target_model": { "type": "string", "enum": ["claude", "claude-standard", "gpt6", "gpt4o", "gpt5", "gemini", "llama", "qwen", "deepseek", "deepseek-local", "kimi", "glm", "pixtral", "gemma", "internvl", "minicpm", "molmo", "aya", "phi4", "granite", "llava", "falcon", "minimax", "step", "ling", "voyage"] }
                                 }
                             }
                         }
@@ -347,16 +347,9 @@ fn optimize_one(args: &Value) -> Result<Value, String> {
     if let Some(max_t) = args.get("max_tiles").and_then(|v| v.as_u64()) {
         cfg_builder = cfg_builder.max_tiles(max_t as u32);
     }
-    if let Some(model_str) = args.get("target_model").and_then(|v| v.as_str()) {
-        let model = match model_str {
-            "gpt4o" | "gpt-4o" => VisionModel::Gpt4o,
-            "gpt5" | "gpt-5" => VisionModel::Gpt5,
-            "gemini" => VisionModel::Gemini15,
-            "llama" | "llama-vision" => VisionModel::LlamaVision,
-            "qwen" | "qwen-vl" => VisionModel::QwenVl,
-            "deepseek" | "deepseek-vl" => VisionModel::DeepseekVl,
-            _ => VisionModel::Claude,
-        };
+    if let Some(model_str) = args.get("target_model").and_then(|v| v.as_str())
+        && let Some(model) = VisionModel::parse(model_str)
+    {
         cfg_builder = cfg_builder.target_model(model);
     }
     let cfg = cfg_builder.build();
@@ -364,16 +357,9 @@ fn optimize_one(args: &Value) -> Result<Value, String> {
     match optimize_image(b64, mode, &cfg) {
         Ok(r) => {
             // Log to DB for Analytics
-            let model_name = match cfg.target_model {
-                Some(VisionModel::Claude) => "Claude",
-                Some(VisionModel::Gpt4o) => "GPT-4o",
-                Some(VisionModel::Gpt5) => "GPT-5",
-                Some(VisionModel::Gemini15) => "Gemini",
-                Some(VisionModel::LlamaVision) => "Llama Vision",
-                Some(VisionModel::QwenVl) => "Qwen-VL",
-                Some(VisionModel::DeepseekVl) => "DeepSeek-VL",
-                None => "Agnostic",
-            };
+            let model_name = cfg
+                .target_model
+                .map_or("Agnostic", VisionModel::display_name);
 
             let m_enum = cfg.target_model.unwrap_or(VisionModel::Claude);
             let orig_tokens =

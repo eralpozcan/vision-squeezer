@@ -16,13 +16,13 @@ const benchmarkData: Record<'standard' | 'highres', Source> = {
       claude: { val: '1,506', pct: '-28.2%', sub: '5,344 → 3,838 tokens', hl: false },
       gpt4o: { val: 'Maximum', pct: 'Locked', sub: 'Perfectly locked to 6 tiles', hl: true },
       file: { val: '33.6%', sub: '0.5MB → 0.3MB' },
-      note: "Targeting GPT-4o perfectly fits the image into a solid 6-tile boundary (2399x1200) mathematically calculated backwards from OpenAI's short-side scaling algorithm."
+      note: 'Targeting GPT-4o perfectly fits the image into a solid 6-tile boundary (2399x1200) mathematically calculated backwards from OpenAI\'s short-side scaling algorithm.'
     },
     claude: {
       claude: { val: '626', pct: '-11.7%', sub: '5,344 → 4,718 tokens', hl: true },
       gpt4o: { val: '0', pct: '0%', sub: '1,105 → 1,105 tokens', hl: false },
       file: { val: '21.3%', sub: '0.5MB → 0.4MB' },
-      note: "By targeting Claude, Squeezer preserves the massive 2304x1536 resolution and solely trims solid padding, minimizing token cost via Claude's area-based formula."
+      note: 'By targeting Claude, Squeezer preserves the massive 2304x1536 resolution and solely trims solid padding, minimizing token cost via Claude\'s area-based formula.'
     }
   },
   highres: {
@@ -31,7 +31,7 @@ const benchmarkData: Record<'standard' | 'highres', Source> = {
       claude: { val: '4,544', pct: '-27.1%', sub: '16,777 → 12,233 tokens', hl: true },
       gpt4o: { val: '0', pct: 'Anomaly', sub: 'OpenAI Grid Paradox Detected', hl: false },
       file: { val: '39.6%', sub: '2.2MB → 1.3MB' },
-      note: "Notice the OpenAI Aspect Ratio Anomaly: Removing padding made the image 'wider', which ironically pushes the long-side into a new OpenAI grid row! (Use --model gpt4o to fix)."
+      note: 'Notice the OpenAI Aspect Ratio Anomaly: Removing padding made the image \'wider\', which ironically pushes the long-side into a new OpenAI grid row! (Use --model gpt4o to fix).'
     },
     gpt4o: {
       claude: { val: '5,595', pct: '-33.3%', sub: '16,777 → 11,182 tokens', hl: false },

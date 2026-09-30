@@ -8,6 +8,7 @@ const { data: files } = useLazyAsyncData('search', () => queryCollectionSearchSe
 
 const route = useRoute()
 const siteUrl = 'https://visionsqueezer.com'
+const canonicalUrl = computed(() => `${siteUrl}${route.path === '/' ? '/' : route.path.replace(/\/$/, '')}`)
 
 useHead({
   meta: [
@@ -15,7 +16,7 @@ useHead({
   ],
   link: [
     { rel: 'icon', href: '/favicon.ico' },
-    { rel: 'canonical', href: () => siteUrl + route.path }
+    { rel: 'canonical', href: canonicalUrl }
   ],
   htmlAttrs: {
     lang: 'en'
@@ -25,7 +26,29 @@ useHead({
 useSeoMeta({
   titleTemplate: `%s - ${seo?.siteName}`,
   ogSiteName: seo?.siteName,
+  ogUrl: canonicalUrl,
+  ogLocale: 'en_US',
+  twitterTitle: () => seo?.siteName,
+  twitterDescription: 'AI vision token optimization middleware and MCP server for image-aware models.',
   twitterCard: 'summary_large_image'
+})
+
+useHead({
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      'name': 'VisionSqueezer',
+      'url': siteUrl,
+      'logo': `${siteUrl}/logo.png`,
+      'sameAs': [
+        'https://github.com/eralpozcan/vision-squeezer',
+        'https://www.npmjs.com/package/vision-squeezer',
+        'https://crates.io/crates/vision-squeezer'
+      ]
+    })
+  }]
 })
 
 provide('navigation', navigation)

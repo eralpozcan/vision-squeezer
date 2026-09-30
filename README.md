@@ -274,7 +274,7 @@ vision-squeezer path/to/image.jpg \
   --smart-crop \                  # edge-energy crop (vs corner-tolerance)
   --auto-quality 0.95 \           # binary-search quality to hit SSIM target
   --bg-tolerance 25 \             # background detection 0-255 (default: 15)
-  --model claude|gpt4o|gpt5|gemini|llama|qwen|deepseek \ # model-aware resizing
+  --model <provider-alias> \ # model-aware resizing; see the model catalog
   --max-tiles 20 \                # hard cap on tile count
   --json \                        # machine-readable JSON output
   --dry-run                       # run pipeline, skip disk write
@@ -296,18 +296,17 @@ vision-squeezer ./screenshots --recursive --json > report.json
 
 If you send raw images to an LLM, you are leaking tokens. Modern vision models do not care about your file size (MB/KB); they only care about **pixel dimensions**, but each provider calculates costs completely differently. `vision-squeezer` simulates these algorithms to find the mathematical minimum size that drops your token usage without losing visual context.
 
-### 1. Claude (Area-Based)
-As of 2026 (Claude 3.5 / 4.5+), Anthropic uses an **area-based formula**: `Tokens ≈ (Width × Height) / 750`. 
-Every single pixel of solid background or padding costs you tokens. 
-* **The Fix:** `vision-squeezer` aggressively crops padding (removing solid color borders). A 1025×1025 screenshot shrinks just enough to drop from 1,400 tokens to 1,024 tokens (**%26 savings**).
+### 1. OpenAI GPT-6 / GPT-5.6 (32px Patches)
+Current OpenAI vision models count **32×32 patches**, fit high-detail images within a 2048px edge and 2500-patch budget, then apply a 1.2 multiplier.
+* **The Fix:** `--model gpt6` removes padding, fits the patch budget, and avoids partially used edge patches. A 1024×1024 input is 1024 patches / 1229 tokens.
 
-### 2. GPT-4.5 / GPT-4o (Tiling & Short-side Scaling)
-OpenAI scales your image to fit inside a 2048px box, then rescales it again so the **shortest side is exactly 768px**. Finally, it chops the image into a grid of **512×512 tiles**. Each tile costs 170 tokens. 
-* **The Fix:** If your image's shortest side ends up being 769px, OpenAI will spill over into an entirely new row of 512×512 tiles, doubling your cost. `vision-squeezer` simulates this exact math and snaps the image down by a few pixels so it fits perfectly into the minimum number of tiles.
+### 2. Claude 4.7+ (28px Patches)
+Claude counts `ceil(Width/28) × ceil(Height/28)` visual tokens. Claude 4.7+ high-resolution vision uses a 2576px edge and 4784-token budget; `claude-standard` covers the earlier 1568px / 1568-token tier.
+* **The Fix:** Strip padding, fit the selected tier, and align dimensions to the 28px grid.
 
-### 3. Gemini 2.0 / 3.0 (Massive Tiles)
+### 3. Gemini 3 (Large Tiles)
 Gemini uses a massive **768×768 tile** system (if the image is > 384px). Each tile is a flat 258 tokens.
-* **The Fix:** An 800×600 image will trigger a 2×1 tile grid (1,032 tokens). `vision-squeezer` snaps it down slightly to fit exactly inside a 768×768 box, dropping the cost to 258 tokens (**%75 savings**).
+* **The Fix:** An 800×600 image triggers a 2×1 tile grid (516 tokens). `vision-squeezer` snaps it down slightly to fit exactly inside a 768×768 box, dropping the cost to 258 tokens (**50% savings**).
 
 ### 4. Llama 3.2 / 3.3 Vision (560px Tiles)
 Meta's Mllama vision tiles images on a **560×560** grid, capped at 4 tiles (~1601 tokens each).
@@ -317,11 +316,19 @@ Meta's Mllama vision tiles images on a **560×560** grid, capped at 4 tiles (~16
 Alibaba's Qwen-VL uses a **28px effective grid** (14px patch × 2×2 merge); `tokens = (W/28)·(H/28)` bounded to `[4, 16384]`.
 * **The Fix:** The patch is small, so area is the lever — a 1024×1024 image with its border stripped to 896×896 drops **1,369 → 1,024 tokens (−25%)**.
 
-### 6. DeepSeek-VL2 (384px Anyres Tiles)
+### 6. DeepSeek Flash / DeepSeek-VL2
+DeepSeek Flash now accepts images through its OpenAI-compatible API and documents an upper bound of **384 image tokens per image**. Use `--model deepseek` for the API profile; use `--model deepseek-local` for the exact DeepSeek-VL2 open-weight tile math.
+
+### 7. Kimi K2.5 / K2.6 / K3
+Kimi supports native image and video input through Moonshot's OpenAI-compatible API. Moonshot does not publish a stable image billing grid, so `--model kimi` gives an advisory native-resolution estimate while still applying exact crop and file-size optimization.
+
+### 8. DeepSeek-VL2 (384px Anyres Tiles)
 SigLIP-384 + 2× pixel-shuffle gives 196 tokens/tile on a `(m·384, n·384)` canvas (`m·n ≤ 9`).
 * **The Fix:** An 800×768 image snapped to 768×768 drops from 3×2 to 2×2 tiles: **1,415 → 1,023 tokens (−28%)**. (Open weights — the win is local-inference context, not API billing.)
 
-> Full provider math, exact formulas, and cited sources: **[visionsqueezer.com/providers](https://visionsqueezer.com/providers/claude)**
+Legacy `gpt4o` and `gpt5` profiles remain available for endpoints that still use 512px high-detail tiles.
+
+> Full provider math and sources: **[visionsqueezer.com/providers](https://visionsqueezer.com/providers/claude)**
 
 </details>
 
@@ -346,6 +353,10 @@ VisionSqueezer is a performance-critical middleware. We chose Rust for three unc
 - **Wasm-Ready:** Rust's first-class support for WebAssembly allows us to bring the same high-performance optimization to the browser and the Edge (Cloudflare Workers), enabling client-side squeezing before the image even hits the network.
 
 ---
+
+### Legacy benchmark snapshots
+
+The snapshots below were captured with the pre-patch-token estimator and are retained only as historical compression examples. Use `--json --dry-run` for current GPT-6/Claude 4.7 token estimates.
 
 ### Case Study 1: Standard Image (istanbul.jpg)
 To demonstrate the impact on standard images, here is the run on a 2400×1670 image (4 MP, 0.5 MB) across the three scenarios:
@@ -397,7 +408,7 @@ Gemini           3096     2064     1032 (33.3%)
 *Notice how targeting `gpt4o` perfectly fits the image into a solid 6-tile boundary (2399x1200) mathematically calculated backwards from OpenAI's short-side scaling algorithm. It maximizes resolution exactly up to the point where an extra tile would be billed.*
 
 ### Example 3: Model-Targeted Optimization (Claude)
-Since Claude uses an area-based calculation (`W × H / 750`), Squeezer primarily focuses on aggressively cropping solid-color borders and padding to shrink the pixel area without drastically downscaling the core visual detail.
+This historical run used Claude's former area estimator; current releases use the 28px patch model documented above.
 
 ```bash
 vision-squeezer data/istanbul.jpg --model claude
@@ -487,7 +498,7 @@ GPT-5            1536     1536        0 (0.0%)
 Gemini           6192     5160     1032 (16.7%)
 ────────────────────────────────────────────────────────────
 ```
-*(Claude's area-based formula again allows massive token savings simply by trimming to the 3840×2816 boundary, preventing you from paying for over 2,300 tokens of pure padding while retaining 10+ megapixels of fidelity).*
+*(Historical estimator output; current Claude estimates use the 28px patch profile.)*
 
 > **💡 FAQ: Wait, why did targeting `gpt4o` save 33% of Claude tokens, but targeting `claude` only saved 14%?**
 > *Because of the **Quality vs. Aggression trade-off**. OpenAI enforces a strict maximum internal resolution (2048px). When you target `gpt4o`, Squeezer must aggressively squash the massive 4096px image down to fit OpenAI's constraints (4095x2048). This massive loss in total pixel area mathematically translates to a huge token drop for Claude.*
@@ -497,9 +508,18 @@ Gemini           6192     5160     1032 (16.7%)
 
 ---
 
-## Benchmark / Savings
+## Current model sanity checks
 
-Real-world token consumption before and after `vision-squeezer` (using standard photos and screenshots without `--max-tiles`). Calculations use updated 2026 billing formulas.
+| Profile | Input | Estimated tokens |
+| --- | --- | ---: |
+| GPT-6 / GPT-5.6 | 1024×1024 | 1,229 |
+| GPT-6 / GPT-5.6 | 2048×2048 | 3,000 after the 2,500-patch cap |
+| Claude 4.7+ | 1000×1000 | 1,296 |
+| Legacy GPT-5 / 5.1 | 1024×1024 | 630 |
+
+## Legacy benchmark / savings
+
+Historical pre-patch-token results. Run `vision-squeezer <image> --model gpt6 --json --dry-run` for current numbers.
 
 | Original Size | Model | Tokens Before | Tokens After | Saved |
 |---------------|-------|---------------|--------------|-------|
@@ -507,7 +527,7 @@ Real-world token consumption before and after `vision-squeezer` (using standard 
 | **4032 × 3024**<br>*(Phone Camera)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 16,257<br>2,125<br>6,192 | 12,232<br>1,745<br>4,128 | **24.8%**<br>17.9%<br>33.3% |
 | **800 × 600**<br>*(Web Image)* | Claude 4.5+<br>GPT-4.5<br>Gemini 2.0+ | 640<br>255<br>1,032 | 341<br>255<br>258 | **46.7%**<br>0.0%<br>75.0% |
 
-*(Note: GPT-5's high limits mean it rarely requires tiling optimization unless the image exceeds 6000px, but `vision-squeezer` will still crop padding and compress the file size dramatically).*
+*(Legacy snapshot; current OpenAI integrations should use `gpt6`.)*
 
 ---
 
@@ -523,7 +543,7 @@ Real-world token consumption before and after `vision-squeezer` (using standard 
 | `crop` | boolean | — | true |
 | `bg_tolerance` | integer 0–255 | — | 15 |
 | `max_tiles` | integer | — | — |
-| `target_model` | `"claude"` \| `"gpt4o"` \| `"gpt5"` \| `"gemini"` | — | — |
+| `target_model` | string enum | — | Core models plus `glm`, `pixtral`, `gemma`, `internvl`, `minicpm`, `molmo`, `aya`, `phi4`, `granite`, `llava`, `falcon`, `minimax`, `step`, `ling`, `voyage` |
 
 **Response:**
 ```json
@@ -544,21 +564,32 @@ Real-world token consumption before and after `vision-squeezer` (using standard 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `quality` | u8 1–100 | 75 | JPEG/WebP output quality |
-| `tile_size` | u32 | 512 | Model patch size (512 = Claude/GPT, 256 = Gemini) |
+| `tile_size` | u32 | 512 | Custom grid size; ignored when `target_model` is set |
 | `crop` | bool | true | Remove solid-color padding borders |
 | `bg_tolerance` | u8 0–255 | 15 | Max channel delta for background detection |
 | `output_format` | jpeg/webp | jpeg | Output encoding. WebP is ~30-50% smaller |
 | `max_tiles` | u32 | — | Hard cap on tile count (progressive downscale) |
-| `target_model` | string | — | Model-aware: `claude`, `gpt4o`, `gpt5`, `gemini` |
+| `target_model` | string | — | Model-aware profile; use `gpt6` for current OpenAI models |
 
 ## Supported Models
 
+## Platform support
+
+Prebuilt MCP binaries cover Linux x86_64/ARM64, macOS Apple Silicon/Intel, and Windows x86_64/ARM64. Python wheels cover Linux x86_64/ARM64, macOS Apple Silicon/Intel, and Windows x86_64. Unsupported Python architectures can install from source with `pip install --no-binary vision-squeezer vision-squeezer`.
+
 | Model | Tile Size | Pre-scaling | Token Formula |
 |-------|-----------|-------------|---------------|
-| Claude 3.5/4.5/4.7 | N/A | None | Tokens ≈ (W × H) / 750 |
-| GPT-4o / GPT-4.5 | 512×512 | fit 2048px → scale short 768px | 85 + tiles × 170 |
-| GPT-5/5.5 | 512×512 | fit 6000px / 10.24M px | min(85 + tiles × 170, 1536) |
-| Gemini 2.0/3.0 | 768×768 | > 384x384 → fit 4096px | 258 per tile (flat 258 if small) |
+| GPT-6 / GPT-5.6 | 32×32 patches | 2048px edge / 2500 patches | ceil(patches × 1.2) |
+| Claude 4.7+ high resolution | 28×28 patches | 2576px edge / 4784 patches | 1 token per patch |
+| Claude standard | 28×28 patches | 1568px edge / 1568 patches | 1 token per patch |
+| GPT-4o / GPT-4.5 (legacy) | 512×512 | fit 2048px → scale short 768px | 85 + tiles × 170 |
+| GPT-5 / GPT-5.1 (legacy) | 512×512 | fit 2048px → scale short 768px | 70 + tiles × 140 |
+| Gemini 3 | 768×768 | flat tier at ≤384×384 | 258 per tile |
+| DeepSeek Flash | provider-managed | up to 384 image tokens | conservative 384-token cap |
+| Kimi K2.5/K2.6/K3 | native-resolution | provider-specific | advisory 28px estimate |
+| GLM, Pixtral/Mistral, Gemma, InternVL | provider-specific | provider-specific | advisory generic profile |
+| MiniCPM, Molmo, Aya, Phi-4, Granite | provider-specific | provider-specific | advisory generic profile |
+| LLaVA, Falcon, MiniMax, Step, Ling, Voyage | provider-specific | provider-specific | advisory generic profile |
 
 ---
 

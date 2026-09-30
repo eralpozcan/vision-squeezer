@@ -4,11 +4,15 @@ VisionSqueezer is a middleware designed to bridge the gap between human-centric 
 
 ## Mathematical Foundations (2026 Billing)
 
-### Anthropic Claude (Area-Based)
-Claude bills based on the formula `(Width * Height) / 750`.
-- **Optimization Strategy:** Maximize resolution while minimizing pixel count by stripping all non-essential solid-color padding and snap-down resizing.
+### Anthropic Claude (28px Patches)
+Claude 4.7+ high-resolution vision counts `ceil(Width/28) * ceil(Height/28)` visual tokens, with a 2576px edge and 4784-token budget. Earlier models use a 1568px edge and 1568-token budget.
+- **Optimization Strategy:** Strip padding, fit the selected tier, and align dimensions to 28px patches.
 
-### OpenAI GPT-4o / GPT-4.5 (Tiling)
+### OpenAI GPT-6 / GPT-5.6 (32px Patches)
+Current OpenAI vision models count 32px patches, cap high-detail inputs at 2500 patches, and apply a 1.2 token multiplier.
+- **Optimization Strategy:** Fit the 2048px edge / 2500-patch budget and remove partially used edge patches.
+
+### Legacy OpenAI GPT-4o / GPT-5 (Tiling)
 OpenAI rescales the short side to 768px, then chops into 512px tiles.
 - **Optimization Strategy:** Reverse-calculate the 768px scaling. Snap the long side to a 512px boundary *after* the internal 768px scale factor is applied. This avoids "spill-over" tiles that double the cost for just a few extra pixels.
 
@@ -16,13 +20,18 @@ OpenAI rescales the short side to 768px, then chops into 512px tiles.
 Gemini uses a 768x768 tiling grid.
 - **Optimization Strategy:** Aggressively snap to 768px boundaries. An 800px image costs 1032 tokens (2x1 tiles), but a 768px image costs only 258 tokens (1 tile).
 
+### DeepSeek Flash and Kimi Vision
+- DeepSeek Flash accepts images through an OpenAI-compatible API and documents an upper bound of 384 image tokens per image. The `deepseek` profile uses that conservative cap; `deepseek-local` preserves the exact DeepSeek-VL2 open-weight formula.
+- Kimi K2.5/K2.6/K3 accept image input through Moonshot's compatible API. Moonshot does not publish a stable image billing grid, so the `kimi` profile is advisory for token estimates while crop and file-size optimization remain exact.
+- Popular families without a stable public image billing grid are accepted through one explicit advisory profile: GLM, Pixtral/Mistral, Gemma, InternVL, MiniCPM, Molmo, Aya, Phi-4, Granite, LLaVA, Falcon, MiniMax, Step, Ling, and Voyage aliases. Estimates are not provider billing claims.
+
 ## MCP Server Specification
 The server implements the Model Context Protocol (MCP) and provides tools for automated image optimization.
 
 ### Tools:
 1. `optimize_image`: Standard optimization.
    - `image_base64`: Input image.
-   - `target_model`: `claude`, `gpt4o`, `gpt5`, `gemini`.
+   - `target_model`: core profiles plus `kimi`, `glm`, `pixtral`, `gemma`, `internvl`, `minicpm`, `molmo`, `aya`, `phi4`, `granite`, `llava`, `falcon`, `minimax`, `step`, `ling`, `voyage`.
    - `mode`: `standard`, `ocr`, `auto`.
 2. `sandbox_execute`: Think-in-Code paradigm.
    - `operations`: Array of `ImageOp`.

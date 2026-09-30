@@ -6,3 +6,9 @@ allowBuilds:
   unrs-resolver: false
   vue-demi: false
   better-sqlite3: true
+minimumReleaseAgeExclude:
+  - esbuild@0.28.1
+overrides:
+  '@tiptap/core': 3.31.3
+  '@tiptap/pm': 3.31.3
+  mdast-util-to-markdown: 2.1.2

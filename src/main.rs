@@ -22,7 +22,9 @@ fn print_usage() {
     eprintln!("  --tile-size N              (default: 512)");
     eprintln!("  --no-crop");
     eprintln!("  --bg-tolerance N           (default: 15)");
-    eprintln!("  --model claude|gpt4o|gpt5|gemini  model-aware resizing");
+    eprintln!(
+        "  --model <provider-alias>  model-aware resizing (e.g. gpt6, claude, gemini, qwen, kimi, pixtral)"
+    );
     eprintln!("  --max-tiles N              (limit maximum token tiles)");
     eprintln!("  --output, -o <path>        (custom output path)");
     eprintln!(
@@ -149,15 +151,7 @@ fn main() {
             }
             "--model" => {
                 i += 1;
-                let m = match args.get(i).map(|s| s.as_str()) {
-                    Some("gpt4o") | Some("gpt-4o") => Some(VisionModel::Gpt4o),
-                    Some("gpt5") | Some("gpt-5") | Some("gpt5.5") => Some(VisionModel::Gpt5),
-                    Some("gemini") => Some(VisionModel::Gemini15),
-                    Some("llama") | Some("llama-vision") => Some(VisionModel::LlamaVision),
-                    Some("qwen") | Some("qwen-vl") => Some(VisionModel::QwenVl),
-                    Some("deepseek") | Some("deepseek-vl") => Some(VisionModel::DeepseekVl),
-                    _ => Some(VisionModel::Claude),
-                };
+                let m = args.get(i).and_then(|s| VisionModel::parse(s));
                 if let Some(model) = m {
                     cfg = cfg.target_model(model);
                 }
@@ -297,16 +291,9 @@ fn run_one(path: &Path, opts: &RunOpts) -> Option<FileOutcome> {
         fs::write(&out_path, &bytes).expect("write failed");
     }
 
-    let target_model_name = match cfg.target_model {
-        Some(VisionModel::Claude) => "Claude",
-        Some(VisionModel::Gpt4o) => "GPT-4o",
-        Some(VisionModel::Gpt5) => "GPT-5",
-        Some(VisionModel::Gemini15) => "Gemini",
-        Some(VisionModel::LlamaVision) => "Llama Vision",
-        Some(VisionModel::QwenVl) => "Qwen-VL",
-        Some(VisionModel::DeepseekVl) => "DeepSeek-VL",
-        None => "Agnostic",
-    };
+    let target_model_name = cfg
+        .target_model
+        .map_or("Agnostic", VisionModel::display_name);
 
     let m = cfg.target_model.unwrap_or(VisionModel::Claude);
     let orig_tokens = vision_squeezer::estimate_tokens(orig_w, orig_h, m).tokens;
@@ -343,6 +330,7 @@ fn run_one(path: &Path, opts: &RunOpts) -> Option<FileOutcome> {
         "size_reduction_pct": result.report.size_reduction_pct(),
         "token_savings_table": {
             "claude": { "before": table.claude_before.tokens, "after": table.claude_after.tokens },
+            "gpt6":    { "before": table.gpt6_before.tokens,    "after": table.gpt6_after.tokens },
             "gpt4o":  { "before": table.gpt4o_before.tokens,  "after": table.gpt4o_after.tokens },
             "gpt5":   { "before": table.gpt5_before.tokens,   "after": table.gpt5_after.tokens },
             "gemini": { "before": table.gemini_before.tokens, "after": table.gemini_after.tokens }

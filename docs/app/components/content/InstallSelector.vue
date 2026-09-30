@@ -37,7 +37,7 @@ const installData: Record<string, { label: string, comment: string, code: string
   },
   'shell-hook': {
     label: 'Shell Integration (Zsh/Bash)',
-    comment: "# Add to your .zshrc or .bashrc for the 'squeeze' command",
+    comment: '# Add to your .zshrc or .bashrc for the \'squeeze\' command',
     code: 'eval "$(npx -y vision-squeezer setup-hook)"'
   },
   'claude-skill': {

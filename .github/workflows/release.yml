@@ -25,6 +25,10 @@ jobs:
             target: aarch64-apple-darwin
             binary: vision-squeezer-mcp
             asset: vision-squeezer-mcp-macos-arm64
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: vision-squeezer-mcp
+            asset: vision-squeezer-mcp-macos-x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary: vision-squeezer-mcp
@@ -37,6 +41,10 @@ jobs:
             target: x86_64-pc-windows-msvc
             binary: vision-squeezer-mcp.exe
             asset: vision-squeezer-mcp-windows-x86_64.exe
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            binary: vision-squeezer-mcp.exe
+            asset: vision-squeezer-mcp-windows-arm64.exe
 
     steps:
       - uses: actions/checkout@v5
@@ -146,4 +154,3 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-

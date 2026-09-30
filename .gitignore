@@ -18,3 +18,4 @@ __pycache__/
 *.so
 *.pyd
 *.dylib
+.pnpm-store/

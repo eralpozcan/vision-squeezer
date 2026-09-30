@@ -138,5 +138,13 @@ export default defineNuxtConfig({
 
   ogImage: {
     zeroRuntime: true
+  },
+
+  robots: {
+    sitemap: ['https://visionsqueezer.com/sitemap.xml']
+  },
+
+  sitemap: {
+    exclude: ['/404']
   }
 })
