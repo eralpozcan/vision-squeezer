@@ -81,6 +81,7 @@ cargo run            # run
 cargo test           # all tests
 cargo test <name>    # single test by name
 cargo clippy         # lint
+node --test tests/install.test.js   # installer (bin/install.js) tests
 cargo fmt            # format
 ```
 

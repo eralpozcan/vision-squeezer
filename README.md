@@ -28,7 +28,7 @@ npx vision-squeezer install
 ```
 
 Prompts for:
-- Target CLI — Claude Code / Codex CLI / Qwen Code / OpenCode / Gemini CLI / Kimi CLI
+- Target — Claude Code / Codex CLI / Qwen Code / OpenCode / Gemini CLI / Kimi CLI / Cursor / Windsurf / Claude Desktop / VS Code
 - Install method (Claude Code only) — `plugin` (bundles MCP + stats/doctor/upgrade skills) or `mcp-add` (server only)
 - Install scope (`mcp-add` only) — `user` (all projects, recommended), `local` (this project only), `project` (share via `.mcp.json`)
 
@@ -37,7 +37,11 @@ Scripted setups pass the choices directly:
 ```bash
 npx vision-squeezer install --client claude --method plugin --yes
 npx vision-squeezer install --client claude --method mcp-add --scope user --yes
+npx vision-squeezer install --client cursor --yes
+npx vision-squeezer install --client vscode --yes
 ```
+
+Editors without a CLI (Cursor, Windsurf, Claude Desktop) get one entry merged into their JSON config; existing servers are kept and a file that cannot be parsed is left untouched.
 
 ### Claude Code — plugin marketplace (one-liner, bundles skills)
 
@@ -63,7 +67,11 @@ claude mcp add --scope project vision-squeezer -- npx -y vision-squeezer
 
 ### Claude Desktop
 
-Add to `~/.config/claude/claude_desktop_config.json`:
+```bash
+npx vision-squeezer install --client claude-desktop --yes
+```
+
+Or add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\\Claude\\`):
 ```json
 {
   "mcpServers": {
@@ -78,15 +86,14 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 ### Cursor
 
 ```bash
-cursor --add-mcp '{"name":"vision-squeezer","type":"stdio","command":"npx","args":["-y","vision-squeezer"]}'
+npx vision-squeezer install --client cursor --yes
 ```
 
-Or add to `.cursor/mcp.json`:
+Or add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "vision-squeezer": {
-      "type": "stdio",
       "command": "npx",
       "args": ["-y", "vision-squeezer"]
     }
@@ -99,7 +106,11 @@ Or add to `.cursor/mcp.json`:
 
 ### VS Code Copilot
 
-Add to `.vscode/mcp.json`:
+```bash
+code --add-mcp '{"name":"vision-squeezer","command":"npx","args":["-y","vision-squeezer"]}'
+```
+
+Or add to `.vscode/mcp.json`:
 ```json
 {
   "servers": {
@@ -128,7 +139,11 @@ Open **Tools → GitHub Copilot → Model Context Protocol (MCP) → Configure**
 
 ### Windsurf
 
-Add to `~/.codeium/windsurf/mcp_config.json`:
+```bash
+npx vision-squeezer install --client windsurf --yes
+```
+
+Or add to `~/.codeium/windsurf/mcp_config.json`:
 ```json
 {
   "mcpServers": {

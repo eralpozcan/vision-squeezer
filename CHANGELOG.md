@@ -7,10 +7,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.7.1] - 2026-10-01
+
+### Added
+- **Installer support for Cursor, Windsurf, Claude Desktop and VS Code.** `npx vision-squeezer install --client <cursor|windsurf|claude-desktop|vscode>`:
+  - **Cursor** (`~/.cursor/mcp.json` or `./.cursor/mcp.json`), **Windsurf** (`~/.codeium/windsurf/mcp_config.json`) and **Claude Desktop** (`claude_desktop_config.json`; macOS and Windows) get one `mcpServers` entry merged into their JSON config. Other servers are kept, re-running is idempotent, and a file that cannot be parsed (for example with comments) is left untouched.
+  - **VS Code** runs `code --add-mcp` with the server definition (user profile).
+  - Every entry pins `vision-squeezer@<version>`. Zed is not included: its `settings.json` allows comments, so a rewrite could destroy the file.
+  - Clients now declare the scopes they support, so `--scope` is validated per client (Windsurf, Claude Desktop, VS Code and Kimi have a single fixed scope and need no `--scope`).
+- **Installer tests** (`node --test tests/install.test.js`): JSON merge, idempotence, unparseable files, scope rules, and the argv each CLI-backed client receives.
 
 ### Changed
-- **MCP setup docs rewritten per client.** One-command table for Claude Code, Codex, Gemini CLI, Qwen Code, Kimi CLI and VS Code (`code --add-mcp`), plus tabs for Cursor, VS Code (portable `.mcp.json`), Windsurf, Zed, Claude Desktop, OpenCode and Codex TOML. Fixes the Cursor key (`mcpServers`), the obsolete VS Code `github.copilot.mcp.servers` setting and the Claude Desktop paths for macOS and Windows.
+- **MCP setup docs rewritten per client.** One-command table for every supported client, plus tabs for Cursor, VS Code (portable `.mcp.json`), Windsurf, Zed, Claude Desktop, OpenCode and Codex TOML. Fixes the Cursor key (`mcpServers`), the obsolete VS Code `github.copilot.mcp.servers` setting and the Claude Desktop paths for macOS and Windows. The README's Cursor example used `servers` instead of `mcpServers` and an unverified `cursor --add-mcp`; both are fixed.
 - **`mcp-publish.yml` waits for the npm version** (polls `npm view`, up to 5 minutes) before publishing to the registry. On v0.7.0 the `workflow_run` trigger fired 17 seconds after `npm publish`, before npm served the version, and the registry rejected it with a 404.
 
 ## [0.7.0] - 2026-10-01
