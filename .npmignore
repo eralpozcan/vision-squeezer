@@ -17,6 +17,7 @@ scripts/
 # Claude / editor
 .claude/
 CLAUDE.md
+AGENTS.md
 
 # Native binaries (downloaded by postinstall, not bundled)
 bin/vision-squeezer-mcp
