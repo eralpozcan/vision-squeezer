@@ -7,6 +7,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **MCP setup docs rewritten per client.** One-command table for Claude Code, Codex, Gemini CLI, Qwen Code, Kimi CLI and VS Code (`code --add-mcp`), plus tabs for Cursor, VS Code (portable `.mcp.json`), Windsurf, Zed, Claude Desktop, OpenCode and Codex TOML. Fixes the Cursor key (`mcpServers`), the obsolete VS Code `github.copilot.mcp.servers` setting and the Claude Desktop paths for macOS and Windows.
+- **`mcp-publish.yml` waits for the npm version** (polls `npm view`, up to 5 minutes) before publishing to the registry. On v0.7.0 the `workflow_run` trigger fired 17 seconds after `npm publish`, before npm served the version, and the registry rejected it with a 404.
+
 ## [0.7.0] - 2026-10-01
 
 ### Added
