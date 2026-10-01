@@ -1,6 +1,6 @@
 [package]
 name = "vision-squeezer-py"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2021"
 description = "Python bindings for vision-squeezer: fit images to a vision-LLM token budget before you send them"
 license = "Elastic-2.0"

@@ -1,6 +1,6 @@
 [package]
 name = "vision-squeezer"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2024"
 default-run = "vision-squeezer"
 description = "Fit images to a vision-LLM token budget before you send them. Library, CLI and MCP server for code, agents and pipelines."

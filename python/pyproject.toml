@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "vision-squeezer"
-version = "0.7.1"
+version = "0.8.0"
 description = "Fit images to a vision-LLM token budget before you send them (Python bindings for vision-squeezer)"
 readme = "README.md"
 requires-python = ">=3.8"

@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.8.0] - 2026-10-01
 
 ### Changed
 - **Honest positioning.** VisionSqueezer fits images to a token budget before they reach the model. It cannot shrink an image a user pastes, drags, or `@`-attaches into a chat window (Claude Code, Cursor, ChatGPT, ...): the client attaches it before any tool or hook runs. README, docs, `llms.txt`, and every package, registry, and plugin description now say so and list where it does save tokens (code that calls a model API, agent tool calls, files inside a Claude Code project). The "install it and tokens drop" framing was wrong for chat paste.

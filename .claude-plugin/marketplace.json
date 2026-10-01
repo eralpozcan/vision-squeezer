@@ -13,7 +13,7 @@
       "name": "vision-squeezer-mcp",
       "source": "./plugins/vision-squeezer-mcp",
       "description": "VisionSqueezer for Claude Code: MCP server (optimize_image / sandbox_execute / get_savings_stats), an image-read hook for project files, and the vision-doctor, vision-upgrade, and vision-stats skills. Does not shrink images pasted into the chat.",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "author": {
         "name": "Eralp Özcan",
         "url": "https://github.com/eralpozcan"
