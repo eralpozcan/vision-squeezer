@@ -136,84 +136,125 @@ test('kimi never gets --scope', posix, () => {
   assert.deepStrictEqual(argv, ['mcp', 'add', 'vision-squeezer', '--', 'npx', '-y', pinned]);
 });
 
-test('claude local scope omits --scope', posix, () => {
-  const { r, argv } = withFakeCli('claude', { args: ['--client', 'claude', '--method', 'mcp-add', '--scope', 'local', '--yes'] });
-  assert.strictEqual(r.status, 0, r.stderr);
-  assert.deepStrictEqual(argv, ['mcp', 'add', 'vision-squeezer', '--', 'npx', '-y', pinned]);
-});
-
 test('gemini rejects the local scope', posix, () => {
   const { r } = withFakeCli('gemini', { args: ['--client', 'gemini', '--scope', 'local', '--yes'] });
   assert.notStrictEqual(r.status, 0);
   assert.match(r.stderr, /supports only: user, project/);
 });
 
-// Claude Code image-read hook, added next to `claude mcp add`.
-function claudeInstall(extra, { home = tmp(), cwd } = {}) {
+// Claude Code: one install method, the plugin, driven through the `claude plugin` CLI.
+function fakeClaude(env = {}, { scope = 'local', home = tmp(), cwd } = {}) {
   const bin = tmp();
-  fs.writeFileSync(path.join(bin, 'claude'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-  const r = spawnSync(process.execPath, [INSTALL, '--client', 'claude', '--method', 'mcp-add', '--yes', ...extra], {
-    env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+  const log = path.join(bin, 'calls.log');
+  fs.writeFileSync(
+    path.join(bin, 'claude'),
+    `#!/bin/sh
+echo "$*" >> "${log}"
+case "$*" in
+  "plugin marketplace list") printf '%s' "$FAKE_MARKETPLACES" ;;
+  "plugin list") printf '%s' "$FAKE_PLUGINS" ;;
+  "mcp remove"*) exit "\${FAKE_MCP_REMOVE_STATUS:-1}" ;;
+  "$FAKE_FAIL_ON"*) [ -n "$FAKE_FAIL_ON" ] && exit 7 ;;
+esac
+exit 0
+`,
+    { mode: 0o755 },
+  );
+  const r = spawnSync(process.execPath, [INSTALL, '--client', 'claude', '--scope', scope, '--yes'], {
+    env: { ...process.env, HOME: home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, ...env },
     cwd: cwd || home,
     encoding: 'utf8',
   });
-  return { r, home };
+  const calls = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n') : [];
+  return { r, calls, home };
 }
-const HOOK_CMD = `npx -y vision-squeezer@${VERSION} hook`;
-const ours = (settings) => settings.hooks.PreToolUse.filter((e) => e.hooks.some((h) => h.command.endsWith(' hook')));
+const TARGET = 'vision-squeezer-mcp@vision-squeezer';
+const MARKETPLACE_LISTED = '  ❯ vision-squeezer\n    Source: GitHub (eralpozcan/vision-squeezer)\n';
 
-test('claude mcp-add also adds the image-read hook (user scope)', posix, () => {
-  const { r, home } = claudeInstall(['--scope', 'user']);
+test('claude installs the plugin: add the marketplace, then install, with the chosen scope', posix, () => {
+  const { r, calls } = fakeClaude({}, { scope: 'user' });
   assert.strictEqual(r.status, 0, r.stderr);
-  const s = read(path.join(home, '.claude', 'settings.json'));
-  const [entry] = ours(s);
-  assert.strictEqual(entry.matcher, 'Read');
-  assert.deepStrictEqual(entry.hooks.map((h) => h.if), ['Read(*.png)', 'Read(*.jpg)', 'Read(*.jpeg)', 'Read(*.webp)', 'Read(*.gif)']);
-  assert.ok(entry.hooks.every((h) => h.type === 'command' && h.command === HOOK_CMD));
+  assert.deepStrictEqual(calls, [
+    'mcp remove vision-squeezer --scope user',
+    'plugin marketplace list',
+    'plugin marketplace add eralpozcan/vision-squeezer',
+    'plugin list',
+    `plugin install ${TARGET} --scope user`,
+  ]);
 });
 
-test('the hook is merged: other settings and hooks kept, re-run does not duplicate, old version replaced', posix, () => {
+test('an already-added marketplace is updated, an already-installed plugin is updated', posix, () => {
+  const { r, calls } = fakeClaude({
+    FAKE_MARKETPLACES: MARKETPLACE_LISTED,
+    FAKE_PLUGINS: `  ❯ ${TARGET}\n    Version: 0.8.0\n`,
+  });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.ok(calls.includes('plugin marketplace update vision-squeezer'));
+  assert.ok(calls.includes(`plugin update ${TARGET}`));
+  assert.ok(!calls.some((c) => c.startsWith('plugin marketplace add') || c.startsWith('plugin install')));
+});
+
+test('a marketplace with a similar name does not count as ours', posix, () => {
+  const { calls } = fakeClaude({ FAKE_MARKETPLACES: '  ❯ vision-squeezer-fork\n    Source: GitHub (x/y)\n' });
+  assert.ok(calls.includes('plugin marketplace add eralpozcan/vision-squeezer'));
+});
+
+test('the older standalone MCP registration is removed when present', posix, () => {
+  const { r } = fakeClaude({ FAKE_MCP_REMOVE_STATUS: '0' });
+  assert.match(r.stdout, /Removed the older standalone MCP registration/);
+});
+
+test('the older settings.json hook is removed, other hooks and settings kept', posix, () => {
   const home = tmp();
   const file = path.join(home, '.claude', 'settings.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const other = { matcher: 'Bash', hooks: [{ type: 'command', command: 'echo hi' }] };
-  const old = { matcher: 'Read', hooks: [{ type: 'command', if: 'Read(*.png)', command: 'npx -y vision-squeezer@0.0.1 hook' }] };
-  fs.writeFileSync(file, JSON.stringify({ model: 'x', hooks: { PreToolUse: [other, old], Stop: [] } }));
-  claudeInstall(['--scope', 'user'], { home });
-  const r = claudeInstall(['--scope', 'user'], { home }).r;
+  const old = { matcher: 'Read', hooks: [{ type: 'command', if: 'Read(*.png)', command: 'npx -y vision-squeezer@0.7.1 hook' }] };
+  fs.writeFileSync(file, JSON.stringify({ model: 'x', hooks: { PreToolUse: [other, old] } }));
+  const { r } = fakeClaude({}, { scope: 'user', home });
   assert.strictEqual(r.status, 0, r.stderr);
-  const s = read(file);
-  assert.strictEqual(s.model, 'x');
-  assert.deepStrictEqual(s.hooks.Stop, []);
-  assert.strictEqual(s.hooks.PreToolUse.length, 2);
-  assert.deepStrictEqual(s.hooks.PreToolUse[0], other);
-  assert.ok(s.hooks.PreToolUse[1].hooks.every((h) => h.command === HOOK_CMD));
+  assert.match(r.stdout, /Removed the older settings.json hook/);
+  assert.deepStrictEqual(read(file), { model: 'x', hooks: { PreToolUse: [other] } });
 });
 
-test('--no-hook skips the hook', posix, () => {
-  const { r, home } = claudeInstall(['--scope', 'user', '--no-hook']);
-  assert.strictEqual(r.status, 0, r.stderr);
-  assert.ok(!fs.existsSync(path.join(home, '.claude', 'settings.json')));
+test('removing our only hook leaves no empty hooks object behind', posix, () => {
+  const home = tmp();
+  const file = path.join(home, '.claude', 'settings.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const old = { matcher: 'Read', hooks: [{ type: 'command', command: 'npx -y vision-squeezer@0.7.1 hook' }] };
+  fs.writeFileSync(file, JSON.stringify({ model: 'x', hooks: { PreToolUse: [old] } }));
+  fakeClaude({}, { scope: 'user', home });
+  assert.deepStrictEqual(read(file), { model: 'x' });
 });
 
-test('project and local scopes write into the project .claude dir', posix, () => {
-  const proj = tmp();
-  claudeInstall(['--scope', 'project'], { cwd: proj });
-  claudeInstall(['--scope', 'local'], { cwd: proj });
-  assert.ok(ours(read(path.join(proj, '.claude', 'settings.json'))).length === 1);
-  assert.ok(ours(read(path.join(proj, '.claude', 'settings.local.json'))).length === 1);
-});
-
-test('settings.json that cannot be parsed is left untouched and the install still succeeds', posix, () => {
+test('settings.json that cannot be parsed is left untouched', posix, () => {
   const home = tmp();
   const file = path.join(home, '.claude', 'settings.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, '{ // comment\n}');
-  const { r } = claudeInstall(['--scope', 'user'], { home });
+  const { r } = fakeClaude({}, { scope: 'user', home });
   assert.strictEqual(r.status, 0, r.stderr);
   assert.strictEqual(fs.readFileSync(file, 'utf8'), '{ // comment\n}');
-  assert.match(r.stderr, /cannot parse/);
 });
+
+test('a failing claude plugin command stops the install with its exit code', posix, () => {
+  const { r, calls } = fakeClaude({ FAKE_FAIL_ON: 'plugin marketplace add' });
+  assert.strictEqual(r.status, 7);
+  assert.ok(!calls.some((c) => c.startsWith('plugin install')));
+});
+
+test('--method is accepted but ignored', posix, () => {
+  const bin = tmp();
+  fs.writeFileSync(path.join(bin, 'claude'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const r = spawnSync(process.execPath, [INSTALL, '--client', 'claude', '--method', 'mcp-add', '--scope', 'user', '--yes'], {
+    env: { ...process.env, HOME: tmp(), PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    encoding: 'utf8',
+  });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.match(r.stderr, /--method is no longer used/);
+});
+
+const HOOK_CMD = `npx -y vision-squeezer@${VERSION} hook`;
 
 test('the plugin ships the same hook, pinned to the package version', () => {
   const plugin = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'plugins', 'vision-squeezer-mcp', 'hooks', 'hooks.json'), 'utf8'));

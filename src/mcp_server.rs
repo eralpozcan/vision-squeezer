@@ -259,28 +259,26 @@ fn handle_sandbox_execute(id: Value, args: Value) -> Response {
     }
 }
 
+fn stats_text() -> Result<String, String> {
+    let stats =
+        vision_squeezer::Persistence::get_stats().map_err(|e| format!("Database error: {e}"))?;
+    Ok(format!(
+        "VisionSqueezer Analytics Report:\n\
+        - Total Optimizations: {}\n\
+        - Total Tokens Saved:  {}\n\
+        - Total Bytes Saved:   {:.2} MB\n\
+        - Estimated USD Saved: ${:.2}",
+        stats.total_optimizations,
+        stats.total_token_savings(),
+        stats.total_byte_savings() as f64 / 1_048_576.0,
+        stats.estimated_usd_saved()
+    ))
+}
+
 fn handle_get_stats(id: Value) -> Response {
-    match vision_squeezer::Persistence::get_stats() {
-        Ok(stats) => {
-            let result = json!({
-                "content": [{
-                    "type": "text",
-                    "text": format!(
-                        "VisionSqueezer Analytics Report:\n\
-                        - Total Optimizations: {}\n\
-                        - Total Tokens Saved:  {}\n\
-                        - Total Bytes Saved:   {:.2} MB\n\
-                        - Estimated USD Saved: ${:.2}",
-                        stats.total_optimizations,
-                        stats.total_token_savings(),
-                        stats.total_byte_savings() as f64 / 1_048_576.0,
-                        stats.estimated_usd_saved()
-                    )
-                }]
-            });
-            Response::ok(id, result)
-        }
-        Err(e) => Response::err(id, -32000, format!("Database error: {}", e)),
+    match stats_text() {
+        Ok(text) => Response::ok(id, json!({ "content": [{ "type": "text", "text": text }] })),
+        Err(e) => Response::err(id, -32000, e),
     }
 }
 
@@ -627,6 +625,17 @@ fn main() {
     let _ = vision_squeezer::Persistence::init_db();
     if args.get(1).map(String::as_str) == Some("optimize") {
         std::process::exit(run_optimize_cli(&args[2..]));
+    }
+    // `npx vision-squeezer stats` for people without the Cargo CLI (used by /vision-stats).
+    if args.get(1).map(String::as_str) == Some("stats") {
+        match stats_text() {
+            Ok(t) => println!("{t}"),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return;
     }
     if args.iter().any(|a| a == "--setup" || a == "--help") {
         print_setup();

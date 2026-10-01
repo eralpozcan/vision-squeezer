@@ -40,11 +40,14 @@ function optimize(input) {
   const report = JSON.parse(r.stdout);
   if (!report.output_path || !(report.tokens_after < report.tokens_before)) return;
 
+  const note = `vision-squeezer: ${report.tokens_before} → ${report.tokens_after} image tokens`;
   return {
+    // systemMessage is the line the user sees; the reason alone is not shown for "allow".
+    systemMessage: note,
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'allow',
-      permissionDecisionReason: `vision-squeezer: ${report.tokens_before} → ${report.tokens_after} image tokens`,
+      permissionDecisionReason: note,
       updatedInput: { ...input.tool_input, file_path: report.output_path },
     },
   };

@@ -10,7 +10,7 @@ allowed-tools: Bash
 
 # vision-stats — VisionSqueezer Analytics Skill
 
-Zero-overhead stats. Calls `vision-squeezer stats` directly — no MCP round-trip.
+Zero-overhead stats. Calls `vision-squeezer stats` directly (the Cargo CLI, or `npx vision-squeezer stats` from the npm package) — no MCP round-trip.
 
 ## Trigger
 
@@ -24,6 +24,7 @@ Run this binary resolution chain, stop at first success:
 vision-squeezer stats 2>/dev/null \
   || ~/.cargo/bin/vision-squeezer stats 2>/dev/null \
   || "$(dirname "$(command -v vision-squeezer-mcp 2>/dev/null)")/vision-squeezer" stats 2>/dev/null \
+  || npx -y vision-squeezer@latest stats 2>/dev/null \
   || find "$HOME/.cargo/bin" "$HOME/Desktop" "$HOME/Projects" -maxdepth 6 -name "vision-squeezer" -not -path "*/deps/*" -not -path "*/debug/*" 2>/dev/null | head -1 | xargs -I{} {} stats 2>/dev/null \
   || echo "vision-squeezer not found. Install: cargo install --git https://github.com/eralpozcan/vision-squeezer"
 ```
@@ -32,7 +33,7 @@ Print output verbatim. No wrapping, no commentary, no interpretation.
 
 ## Error handling
 
-Binary not found → tell user to run `cargo install --path .` from project root or `eval "$(vision-squeezer setup-hook)"` after install.
+Nothing found → tell the user to run `npx -y vision-squeezer@latest stats`, or `cargo install vision-squeezer` for the full CLI.
 
 ## Notes
 

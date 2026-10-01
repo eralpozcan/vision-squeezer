@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **One install path per client.** `install --client claude` now installs the `vision-squeezer-mcp` plugin (MCP server, skills, image-read hook) by running `claude plugin marketplace add` and `claude plugin install --scope <scope>`; the installer used to print `/plugin` commands because they could not be run from a shell. An older `claude mcp add` registration and the `settings.json` hook that earlier versions wrote are removed first, so nothing runs twice. **Removed:** the Claude Code `--method` prompt and `--no-hook`. `--method` is still accepted and ignored. The install docs and README show the same one-command-per-client table for every client.
+- **Honest baseline.** Claude Code already downsizes large images (a 2400×1670 file reached the model as 1999×1392). Docs and README now say the 1600-token budget saves about 56% against that, not 66% against the original file.
+
+### Added
+- **The read hook tells you what it did.** It prints `vision-squeezer: X → Y image tokens` through `systemMessage`; the decision reason alone is not shown for an allowed call.
+- **`vision-squeezer-mcp stats`** (and `npx vision-squeezer stats`).
+
+### Fixed
+- **`/vision-stats` failed for npm installs.** The skill called `vision-squeezer stats`, a command only the Cargo CLI has. It now falls back to `npx vision-squeezer@latest stats`.
+
 ## [0.8.0] - 2026-10-01
 
 ### Changed

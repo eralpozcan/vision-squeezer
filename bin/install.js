@@ -57,22 +57,6 @@ const CLIENTS = [
   { key: 'vscode', label: 'VS Code', cli: 'code', scopes: ['user'] },
 ];
 
-// Install methods available for Claude Code only. Codex/Qwen go straight to
-// `mcp add`. OpenCode has no non-interactive `mcp add` — it only reads
-// config files — so it gets CONFIG_METHOD below instead.
-const METHODS = [
-  {
-    key: 'plugin',
-    label: 'Claude plugin marketplace',
-    description: 'One-command install via /plugin — bundles MCP server + stats/doctor/upgrade skills',
-  },
-  {
-    key: 'mcp-add',
-    label: 'claude mcp add',
-    description: 'Register only the MCP server (no bundled skills) using `claude mcp add`',
-  },
-];
-
 // Clients without a usable `mcp add` (OpenCode's is interactive-only; Cursor,
 // Windsurf and Claude Desktop have none) get their JSON config written directly.
 const CONFIG_METHOD = { key: 'config-file', label: 'config file' };
@@ -120,16 +104,16 @@ const JSON_TARGETS = {
 
 const MARKETPLACE_REPO = 'eralpozcan/vision-squeezer';
 const PLUGIN_NAME = 'vision-squeezer-mcp';
+const MARKETPLACE_NAME = 'vision-squeezer';
 
 function parseArgs(argv) {
-  const out = { scope: null, client: null, method: null, yes: false, hook: true };
+  const out = { scope: null, client: null, method: null, yes: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--scope' || a === '-s') out.scope = argv[++i];
     else if (a === '--client' || a === '-c') out.client = argv[++i];
     else if (a === '--method' || a === '-m') out.method = argv[++i];
     else if (a === '--yes' || a === '-y') out.yes = true;
-    else if (a === '--no-hook') out.hook = false;
     else if (a === '--help' || a === '-h') out.help = true;
   }
   return out;
@@ -143,32 +127,24 @@ Usage:
 
 Options:
   -c, --client <name>   Target (claude | codex | qwen | opencode | gemini | kimi | cursor | windsurf | claude-desktop | vscode)
-  -m, --method <name>   Install method for Claude Code (plugin | mcp-add)
-  -s, --scope <name>    Install scope for 'mcp-add' (user | local | project)
+  -s, --scope <name>    Install scope (user | local | project)
   -y, --yes             Skip confirmation prompt
-      --no-hook         Claude Code mcp-add: do not add the image-read hook
   -h, --help            Show this help
 
-Methods (Claude Code only):
-  plugin    /plugin marketplace add eralpozcan/vision-squeezer
-            /plugin install vision-squeezer-mcp@vision-squeezer
-            Bundles MCP server + stats/doctor/upgrade skills.
+Claude Code:
+  Installs the plugin, which bundles the MCP server, the /vision-stats,
+  /vision-doctor and /vision-upgrade skills, and a hook that hands Claude the
+  token-optimized copy of images it reads inside the project:
+    claude plugin marketplace add eralpozcan/vision-squeezer
+    claude plugin install vision-squeezer-mcp@vision-squeezer --scope <scope>
+  An older standalone registration (claude mcp add) and its settings.json hook
+  are removed first. Restart Claude Code or run /reload-plugins afterwards.
+  Pasted images and @-files are not covered.
 
-  mcp-add   claude mcp add [--scope X] vision-squeezer -- npx -y vision-squeezer@<version>
-            Server only, no skills bundled. The version is pinned to the
-            installer's package version so the npx cache busts on upgrade.
-
-Image-read hook (Claude Code):
-  With mcp-add the installer also adds a PreToolUse hook to Claude Code's
-  settings.json (user: ~/.claude, project: .claude/settings.json, local:
-  .claude/settings.local.json). When Claude reads an image inside the project,
-  the hook hands it the token-optimized copy. The plugin method ships the same
-  hook. Pass --no-hook to skip it. Pasted images and @-files are not covered.
-
-Scopes (mcp-add):
+Scopes:
   user      All projects on this machine (recommended)
   local     This project only, private to you (default for Claude Code)
-  project   Shared via .mcp.json checked into the repo
+  project   Shared with the repo
 
 OpenCode:
   \`opencode mcp add\` is interactive-only (no flags), so this installer
@@ -236,20 +212,10 @@ function commandExists(cmd) {
   return r.status === 0;
 }
 
-// ── Claude Code image-read hook ──────────────────────────────────────────────
+// ── Claude Code plugin ───────────────────────────────────────────────────────
 
-const HOOK_COMMAND = `npx -y vision-squeezer@${PKG_VERSION} hook`;
-const HOOK_IMAGE_GLOBS = ['*.png', '*.jpg', '*.jpeg', '*.webp', '*.gif'];
-
-// One handler per extension: the `if` filter keeps the hook from spawning on
-// every Read of a source file.
-function hookEntry() {
-  return {
-    matcher: 'Read',
-    hooks: HOOK_IMAGE_GLOBS.map((g) => ({ type: 'command', if: `Read(${g})`, command: HOOK_COMMAND })),
-  };
-}
-
+// Older installers registered the hook in settings.json. The plugin ships it now,
+// so a leftover copy would run twice.
 function isOurHook(entry) {
   return Array.isArray(entry && entry.hooks)
     && entry.hooks.some((h) => typeof h.command === 'string' && /vision-squeezer@\S+ hook$/.test(h.command));
@@ -260,33 +226,29 @@ function claudeSettingsPath(scope) {
   return path.join(process.cwd(), '.claude', scope.key === 'project' ? 'settings.json' : 'settings.local.json');
 }
 
-// Merge our hook into Claude Code's settings. Other settings and hooks are kept,
-// an older copy of ours is replaced (so upgrades re-pin the version), and a file
-// that cannot be parsed is left untouched.
-function installClaudeHook(scope) {
+// Returns true when something was removed. A file that cannot be parsed is left alone.
+function removeOldClaudeHook(scope) {
   const file = claudeSettingsPath(scope);
-  let settings = {};
-  if (fs.existsSync(file)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(file, 'utf8'));
-    } catch (err) {
-      console.error(`Could not add the image-read hook: cannot parse ${file} (${err.message}). Left untouched.`);
-      return false;
-    }
-  } else {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (!fs.existsSync(file)) return false;
+  let settings;
+  try {
+    settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return false;
   }
-  settings.hooks = settings.hooks || {};
-  const pre = Array.isArray(settings.hooks.PreToolUse) ? settings.hooks.PreToolUse : [];
-  settings.hooks.PreToolUse = [...pre.filter((e) => !isOurHook(e)), hookEntry()];
+  const pre = settings.hooks && Array.isArray(settings.hooks.PreToolUse) ? settings.hooks.PreToolUse : [];
+  const kept = pre.filter((e) => !isOurHook(e));
+  if (kept.length === pre.length) return false;
+  if (kept.length) settings.hooks.PreToolUse = kept;
+  else delete settings.hooks.PreToolUse;
+  if (!Object.keys(settings.hooks).length) delete settings.hooks;
   fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
-  console.log(`Added the image-read hook to ${file}. Claude Code now reads project images at their optimized size.`);
   return true;
 }
 
 function buildArgs(client, scope) {
-  // claude/codex/qwen/gemini accept the same shape: `<cli> mcp add [--scope X] NAME -- npx -y vision-squeezer@<version>`
-  // `local` is the Claude Code default — omit the flag to keep behavior identical to docs.
+  // codex/qwen/gemini/kimi accept the same shape: `<cli> mcp add [--scope X] NAME -- npx -y vision-squeezer@<version>`
+  // `local` is the default for these CLIs — omit the flag.
   // Kimi CLI has no scope concept (single global ~/.kimi/mcp.json) — never pass --scope.
   if (client.key === 'vscode') {
     return ['--add-mcp', JSON.stringify({ name: 'vision-squeezer', ...stdioEntry() })];
@@ -330,35 +292,14 @@ async function main() {
     return 1;
   }
 
-  let method;
-  if (opts.method) {
-    method = METHODS.find((m) => m.key === opts.method.toLowerCase());
-    if (!method) {
-      console.error(`Unknown method: ${opts.method}. Expected one of: ${METHODS.map((m) => m.key).join(', ')}`);
-      return 1;
-    }
-  }
+  if (opts.method) console.error('Note: --method is no longer used; Claude Code is installed as a plugin.');
 
-  // For non-Claude clients there is no /plugin equivalent — auto-force mcp-add.
-  if (client && client.key !== 'claude' && !method) {
-    method = METHODS.find((m) => m.key === 'mcp-add');
-  }
-  const needsMethodPrompt = () => {
-    if (!client) return true; // client unknown → maybe claude → may need method
-    if (client.key !== 'claude') return false;
-    return !method;
-  };
-  const needsScopePrompt = () => {
-    if (method && method.key === 'plugin') return false;
-    if (client && client.scopes && client.scopes.length === 1) return false; // single fixed scope
-    return !scope;
-  };
-
-  const interactive = !client || needsMethodPrompt() || needsScopePrompt();
+  const singleScope = () => client && client.scopes && client.scopes.length === 1;
+  const interactive = !client || (!singleScope() && !scope);
   let rl;
   if (interactive) {
     if (!process.stdin.isTTY) {
-      console.error('Non-interactive shell detected. Pass --client (and --method / --scope) explicitly.');
+      console.error('Non-interactive shell detected. Pass --client (and --scope) explicitly.');
       printHelp();
       return 1;
     }
@@ -366,42 +307,24 @@ async function main() {
   }
 
   try {
-    if (!client) client = await pickFromList(rl, 'Pick an AI CLI', CLIENTS, 'claude');
-
-    if (client.key === 'claude') {
-      if (!method) method = await pickFromList(rl, 'Pick install method', METHODS, 'plugin');
-    } else if (client.kind === 'json') {
-      method = CONFIG_METHOD;
-    } else {
-      // codex / qwen / gemini / kimi / vscode have no plugin marketplace concept
-      method = METHODS.find((m) => m.key === 'mcp-add');
-    }
+    if (!client) client = await pickFromList(rl, 'Pick a client', CLIENTS, 'claude');
     // A single supported scope (kimi, windsurf, claude-desktop, vscode) is not a choice.
     if (!scope && client.scopes && client.scopes.length === 1) {
       scope = SCOPES.find((s) => s.key === client.scopes[0]);
     }
-
-    if ((method.key === 'mcp-add' || method.key === 'config-file') && !scope) {
+    if (!scope) {
       const scopeList = client.scopes ? SCOPES.filter((s) => client.scopes.includes(s.key)) : SCOPES;
       scope = await pickFromList(rl, 'Pick install scope', scopeList, 'user');
     }
 
-    if (!commandExists(client.cli) && method.key !== 'config-file') {
+    if (client.kind !== 'json' && !commandExists(client.cli)) {
       console.error(`\n'${client.cli}' CLI not found in PATH.`);
-      const flags = method.key === 'plugin'
-        ? `--client ${client.key} --method plugin`
-        : `--client ${client.key} --method mcp-add --scope ${scope.key}`;
-      console.error(`Install it first, then re-run: npx vision-squeezer install ${flags}`);
+      console.error(`Install it first, then re-run: npx vision-squeezer install --client ${client.key} --scope ${scope.key}`);
       return 1;
     }
 
-    if (method.key === 'plugin') {
-      return await runPluginInstall(rl, opts.yes);
-    }
-
-    if (method.key === 'config-file') {
-      return await runJsonInstall(client, rl, scope, opts.yes);
-    }
+    if (client.key === 'claude') return await runClaudePluginInstall(rl, scope, opts.yes);
+    if (client.kind === 'json') return await runJsonInstall(client, rl, scope, opts.yes);
 
     const args = buildArgs(client, scope);
     console.log(`\nWill run: ${client.cli} ${args.join(' ')}`);
@@ -424,7 +347,6 @@ async function main() {
       return result.status ?? 1;
     }
     console.log(`\nDone. VisionSqueezer registered with ${client.label} (scope: ${scope.key}).`);
-    if (client.key === 'claude' && opts.hook) installClaudeHook(scope);
     return 0;
   } finally {
     if (rl && !rl.closed) rl.close();
@@ -471,45 +393,49 @@ async function runJsonInstall(client, rl, scope, yes) {
   return 0;
 }
 
-async function runPluginInstall(rl, yes) {
-  // /plugin commands run inside Claude Code's TUI — they aren't shell-callable.
-  // Print copy-paste instructions instead of trying to spawn a slash command.
-  console.log(`
-Claude plugin marketplace install
-─────────────────────────────────
-Open Claude Code and run these two commands:
+const claudeRun = (args, opts = {}) => spawnSync('claude', args, { encoding: 'utf8', ...opts });
 
-  /plugin marketplace add ${MARKETPLACE_REPO}
-  /plugin install ${PLUGIN_NAME}@vision-squeezer
-
-The first command registers the marketplace; the second installs the bundled
-MCP server. After install, restart any open Claude Code session for the MCP
-server to attach.
-`);
+async function runClaudePluginInstall(rl, scope, yes) {
+  const target = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
+  console.log(`\nWill install the ${PLUGIN_NAME} plugin (MCP server + skills + image-read hook), scope: ${scope.key}:`);
+  console.log(`  claude plugin marketplace add ${MARKETPLACE_REPO}   (update if already added)`);
+  console.log(`  claude plugin install ${target} --scope ${scope.key}   (update if already installed)`);
+  console.log('An older standalone registration and settings.json hook are removed first.');
 
   if (rl && !yes) {
-    const ans = await prompt(rl, 'Copy the marketplace add command to clipboard? [Y/n]: ');
-    if (!ans || /^y(es)?$/i.test(ans)) {
-      const text = `/plugin marketplace add ${MARKETPLACE_REPO}`;
-      const ok = copyToClipboard(text);
-      console.log(ok ? 'Copied. Paste in Claude Code.' : 'Clipboard unavailable — copy manually.');
+    const confirm = await prompt(rl, 'Proceed? [Y/n]: ');
+    if (confirm && !/^y(es)?$/i.test(confirm)) {
+      console.log('Cancelled.');
+      return 0;
     }
-    rl.close();
   }
-  return 0;
-}
+  if (rl) rl.close();
 
-function copyToClipboard(text) {
-  const candidates = process.platform === 'darwin'
-    ? [['pbcopy', []]]
-    : process.platform === 'win32'
-      ? [['clip', []]]
-      : [['xclip', ['-selection', 'clipboard']], ['xsel', ['--clipboard', '--input']], ['wl-copy', []]];
-  for (const [cmd, args] of candidates) {
-    const r = spawnSync(cmd, args, { input: text, stdio: ['pipe', 'ignore', 'ignore'] });
-    if (!r.error && (r.status ?? 0) === 0) return true;
+  // Migrate from the old two-method installer: the plugin provides both again.
+  if (claudeRun(['mcp', 'remove', 'vision-squeezer', '--scope', scope.key]).status === 0) {
+    console.log('Removed the older standalone MCP registration.');
   }
-  return false;
+  if (removeOldClaudeHook(scope)) console.log('Removed the older settings.json hook.');
+
+  const run = (args) => {
+    const r = claudeRun(args, { stdio: 'inherit' });
+    if (r.error) console.error(r.error.message);
+    return r.error ? 1 : (r.status ?? 0);
+  };
+
+  const marketplaces = claudeRun(['plugin', 'marketplace', 'list']).stdout || '';
+  const marketplaceAdded = new RegExp(`(^|\\s)${MARKETPLACE_NAME}\\s*\\n\\s+Source:`).test(marketplaces);
+  let code = run(marketplaceAdded
+    ? ['plugin', 'marketplace', 'update', MARKETPLACE_NAME]
+    : ['plugin', 'marketplace', 'add', MARKETPLACE_REPO]);
+  if (code !== 0) return code;
+
+  const installed = (claudeRun(['plugin', 'list']).stdout || '').includes(target);
+  code = run(installed ? ['plugin', 'update', target] : ['plugin', 'install', target, '--scope', scope.key]);
+  if (code !== 0) return code;
+
+  console.log('\nDone. Restart Claude Code, or run /reload-plugins, to load the MCP server, skills and hook.');
+  return 0;
 }
 
 main().then((code) => process.exit(code)).catch((err) => {

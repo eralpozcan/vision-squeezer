@@ -220,6 +220,23 @@ fn mcp_optimize_image_rejects_a_missing_file() {
 }
 
 #[test]
+fn stats_subcommand_prints_the_report_without_the_cargo_cli() {
+    let home = std::env::temp_dir().join(format!("vs-stats-home-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    let out = Command::cargo_bin("vision-squeezer-mcp")
+        .unwrap()
+        .arg("stats")
+        .env("HOME", &home)
+        .output()
+        .expect("run stats");
+    assert!(out.status.success());
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.contains("VisionSqueezer Analytics Report"), "{text}");
+    assert!(text.contains("Total Optimizations: 0"), "{text}");
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
 fn mcp_unknown_method_returns_error() {
     let mut child = Command::cargo_bin("vision-squeezer-mcp")
         .unwrap()

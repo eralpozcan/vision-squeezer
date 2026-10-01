@@ -51,6 +51,7 @@ test('an image inside the project is rewritten to the optimized copy', { skip },
   assert.strictEqual(o.hookEventName, 'PreToolUse');
   assert.strictEqual(o.permissionDecision, 'allow');
   assert.match(o.permissionDecisionReason, /image tokens/);
+  assert.match(out.systemMessage, /^vision-squeezer: \d+ → \d+ image tokens$/);
   assert.ok(fs.existsSync(o.updatedInput.file_path));
   assert.ok(fs.statSync(o.updatedInput.file_path).size < fs.statSync(BIG).size);
   assert.notStrictEqual(o.updatedInput.file_path, path.join(cwd, 'shot.jpg'));
