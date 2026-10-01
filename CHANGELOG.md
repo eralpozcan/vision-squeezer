@@ -17,6 +17,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - **The read hook tells you what it did.** It prints `vision-squeezer: X → Y image tokens` through `systemMessage`; the decision reason alone is not shown for an allowed call.
 - **`vision-squeezer-mcp stats`** (and `npx vision-squeezer stats`).
 
+- **Image-read hook for Cursor, Gemini CLI and OpenCode**, installed by `install --client cursor|gemini|opencode`. One hook core with a small adapter per client (`npx vision-squeezer hook --client <name>`): Cursor `preToolUse` + `updated_input` on `Read` (`hooks.json`), Gemini CLI `BeforeTool` on `read_file` (`hookSpecificOutput.tool_input`), OpenCode a generated plugin on `tool.execute.before`. These follow each vendor's documentation and are **not yet tested inside the real apps**. They keep the optimized copy in a self-ignoring `.vision-squeezer/` folder inside the project, because these clients restrict reads to the workspace. Codex CLI, Windsurf, VS Code Copilot and Kimi CLI stay MCP-only: their hooks cannot rewrite an image read, or the docs do not say they can.
+- **`output_dir` argument** on `optimize_image` with `image_path`, and `--out-dir` on `vision-squeezer-mcp optimize`.
+
 ### Fixed
 - **`/vision-stats` failed for npm installs.** The skill called `vision-squeezer stats`, a command only the Cargo CLI has. It now falls back to `npx vision-squeezer@latest stats`.
 

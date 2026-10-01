@@ -40,9 +40,14 @@ Every client has exactly one install path, and the installer picks it:
 | Client | What `install` does |
 |---|---|
 | Claude Code | Installs the `vision-squeezer-mcp` plugin: MCP server, `/vision-stats` `/vision-doctor` `/vision-upgrade` skills, and the image-read hook |
-| Codex CLI, Gemini CLI, Qwen Code, Kimi CLI | Runs `<cli> mcp add vision-squeezer -- npx -y vision-squeezer@<version>` |
+| Codex CLI, Qwen Code, Kimi CLI | Runs `<cli> mcp add vision-squeezer -- npx -y vision-squeezer@<version>` |
+| Gemini CLI | Same `mcp add`, plus an image-read hook in `settings.json` |
 | VS Code | Runs `code --add-mcp` |
-| Cursor, Windsurf, Claude Desktop, OpenCode | Merges one pinned entry into the client's JSON config. Other servers are kept and a file that cannot be parsed is left untouched |
+| Cursor | Merges one pinned entry into `mcp.json`, plus an image-read hook in `hooks.json` |
+| OpenCode | Merges one pinned entry into `opencode.json`, plus an image-read plugin |
+| Windsurf, Claude Desktop | Merges one pinned entry into the client's JSON config |
+
+JSON files are merged, never replaced: other servers and hooks are kept, a file that cannot be parsed is left untouched, and re-running replaces our own entry instead of adding a second.
 
 The scope (`user`, `local`, `project`) is asked only when the client supports more than one. `--method` from older versions is accepted and ignored.
 
@@ -498,6 +503,20 @@ The optimization only helps if the **smaller image is what reaches the model**. 
 | You attach a file with `@path` | **No.** No tool call happens, so no hook fires |
 
 **The baseline matters.** Claude Code already downsizes large images before it sends them: in our test a 2400×1670 file reached the model as 1999×1392. Against that, the 1600-token budget saves about 56% on `istanbul.jpg` (about 3,600 → 1,584 estimated tokens), not the 66% measured against the original file. All token counts here are estimates from each provider's published rules, not billed usage.
+
+| Client | Image-read hook | Status |
+|---|---|---|
+| Claude Code | Yes, `PreToolUse` on `Read` (plugin) | Tested in a live session |
+| Cursor | Yes, `preToolUse` + `updated_input` on `Read` (`hooks.json`) | Follows Cursor's docs, not tested in the app |
+| Gemini CLI | Yes, `BeforeTool` on `read_file` (`settings.json`) | Follows Gemini's docs, not tested in the app. Google replaced Gemini CLI with Antigravity CLI for free and Google One users on 2026-06-18 |
+| OpenCode | Yes, a plugin on `tool.execute.before` for `read` | Follows OpenCode's docs, not tested in the app |
+| Codex CLI | No. Hooks can rewrite a call, but Codex's docs list no image-read tool path | MCP tool only |
+| Windsurf | No. `pre_read_code` can only block | MCP tool only |
+| VS Code Copilot | No. The docs show no way to rewrite a tool input | MCP tool only |
+| Kimi CLI | No. `PreToolUse` shows the input but the docs describe no rewrite | MCP tool only |
+| Qwen Code, Claude Desktop | Not checked / no hook system | MCP tool only |
+
+"MCP tool only" means the agent has to call `optimize_image` itself with an `image_path`; tell it to in `AGENTS.md`. The hooks for Cursor, Gemini CLI, and OpenCode keep their copy in a self-ignoring `.vision-squeezer/` folder inside the project, because those clients restrict reads to the workspace.
 
 Save screenshots into the project (for example `screenshots/`) and reference them by path to get the saving. The hook only rewrites files inside the project: it answers with an allow decision, so it must not open files a plain `Read` would have asked about.
 

@@ -125,6 +125,7 @@ The Claude Code plugin marketplace (`.claude-plugin/marketplace.json`) bundles f
 
 ### Installer + MCP Registration
 
+- Hooks: Claude Code gets its hook from the plugin (`hooks/hooks.json`, pinned above). Cursor, Gemini CLI and OpenCode hooks are written by `bin/install.js` from the package version, so they need no manifest bump; all of them call `bin/hook.js` (one adapter per client). Do not rely on a hook without a test in `tests/hook.test.js`.
 - Claude Code is installed as the `vision-squeezer-mcp` plugin through `claude plugin marketplace add` + `claude plugin install` (one method; there is no `mcp add` path any more, and old registrations are removed). Other clients: `bin/install.js` registers the MCP via `npx -y vision-squeezer@<PINNED_VERSION>` — the explicit `@X.Y.Z` is **load-bearing**. Without it, `npx`'s cache in `~/.npm/_npx` freezes users on whatever tarball was first resolved, even after `npm install -g vision-squeezer@latest` bumps the global. Past "MCP failed to connect" reports trace back to this cache.
 - `plugins/vision-squeezer-mcp/.mcp.json` is the equivalent for the plugin-marketplace path (`/plugin install vision-squeezer-mcp@vision-squeezer`). It must be pinned the same way — see the release invariant above.
 - The `vision-upgrade` skill flushes `~/.npm/_npx` and re-registers with the new pinned version on every upgrade.

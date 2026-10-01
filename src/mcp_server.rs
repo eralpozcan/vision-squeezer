@@ -80,6 +80,10 @@ fn tools_list() -> Value {
                             "type": "string",
                             "description": "Path to a local image file (JPEG/PNG/WebP/GIF). Preferred: the file is read locally and the optimized copy is returned as an image plus written to a temp file (see output_path). Use this or image_base64."
                         },
+                        "output_dir": {
+                            "type": "string",
+                            "description": "With image_path: directory for the optimized copy (default: the OS temp dir)."
+                        },
                         "image_base64": {
                             "type": "string",
                             "description": "Base64-encoded image (JPEG/PNG/WebP). Data-URL prefix accepted. Use this or image_path."
@@ -342,18 +346,20 @@ struct Optimized {
     mime: &'static str,
 }
 
-/// Where an optimized copy of `input` is written: a stable name under the OS
-/// temp dir, so re-optimizing the same image reuses one file.
-fn output_path_for(input: &Path, optimized_b64: &str, ext: &str) -> PathBuf {
+/// Where an optimized copy of `input` is written: a stable name under `dir`
+/// (the OS temp dir when not given), so re-optimizing the same image reuses one file.
+fn output_path_for(input: &Path, optimized_b64: &str, ext: &str, dir: Option<&Path>) -> PathBuf {
     let mut h = DefaultHasher::new();
     optimized_b64.hash(&mut h);
     let stem = input
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("image");
-    std::env::temp_dir()
-        .join("vision-squeezer")
-        .join(format!("{stem}-{:08x}.{ext}", h.finish() as u32))
+    let dir = dir.map_or_else(
+        || std::env::temp_dir().join("vision-squeezer"),
+        Path::to_path_buf,
+    );
+    dir.join(format!("{stem}-{:08x}.{ext}", h.finish() as u32))
 }
 
 /// Optimize a single image from an arguments object (same shape as the
@@ -466,7 +472,11 @@ fn optimize_one(args: &Value) -> Result<Optimized, String> {
             };
             let output_path = match &input_path {
                 Some(input) => {
-                    let out = output_path_for(input, &r.optimized_base64, ext);
+                    let out_dir = args
+                        .get("output_dir")
+                        .and_then(|v| v.as_str())
+                        .map(PathBuf::from);
+                    let out = output_path_for(input, &r.optimized_base64, ext, out_dir.as_deref());
                     let bytes = B64.decode(&r.optimized_base64).map_err(|e| e.to_string())?;
                     if let Some(dir) = out.parent() {
                         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -587,7 +597,9 @@ fn print_setup() {
 /// mode for hooks and scripts. Prints the JSON report (with output_path) to stdout.
 fn run_optimize_cli(args: &[String]) -> i32 {
     let Some(path) = args.first() else {
-        eprintln!("usage: vision-squeezer-mcp optimize <image> [--max-tokens N] [--model M]");
+        eprintln!(
+            "usage: vision-squeezer-mcp optimize <image> [--max-tokens N] [--model M] [--out-dir DIR]"
+        );
         return 2;
     };
     let mut req = json!({ "image_path": path });
@@ -598,6 +610,7 @@ fn run_optimize_cli(args: &[String]) -> i32 {
                 req["max_tokens"] = json!(v.parse::<u64>().unwrap())
             }
             ("--model", Some(v)) => req["target_model"] = json!(v),
+            ("--out-dir", Some(v)) => req["output_dir"] = json!(v),
             _ => {
                 eprintln!("unexpected argument: {flag}");
                 return 2;
