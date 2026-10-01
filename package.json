@@ -1,6 +1,6 @@
 {
   "name": "vision-squeezer",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "mcpName": "io.github.eralpozcan/vision-squeezer",
   "description": "Fit images to a vision-LLM token budget before you send them. MCP server for agents and pipelines; cannot resize images pasted into a chat UI.",
   "license": "Elastic-2.0",

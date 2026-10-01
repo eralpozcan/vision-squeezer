@@ -8,27 +8,27 @@
           {
             "type": "command",
             "if": "Read(*.png)",
-            "command": "npx -y vision-squeezer@0.8.0 hook"
+            "command": "npx -y vision-squeezer@0.8.1 hook"
           },
           {
             "type": "command",
             "if": "Read(*.jpg)",
-            "command": "npx -y vision-squeezer@0.8.0 hook"
+            "command": "npx -y vision-squeezer@0.8.1 hook"
           },
           {
             "type": "command",
             "if": "Read(*.jpeg)",
-            "command": "npx -y vision-squeezer@0.8.0 hook"
+            "command": "npx -y vision-squeezer@0.8.1 hook"
           },
           {
             "type": "command",
             "if": "Read(*.webp)",
-            "command": "npx -y vision-squeezer@0.8.0 hook"
+            "command": "npx -y vision-squeezer@0.8.1 hook"
           },
           {
             "type": "command",
             "if": "Read(*.gif)",
-            "command": "npx -y vision-squeezer@0.8.0 hook"
+            "command": "npx -y vision-squeezer@0.8.1 hook"
           }
         ]
       }
