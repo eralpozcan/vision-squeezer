@@ -7,6 +7,21 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.0] - 2026-10-23
+
+### Added
+- **HTTP API: `vision-squeezer serve [--host H] [--port P]`** (default `127.0.0.1:8080`), for workflow tools such as n8n, Make and Zapier. `POST /optimize` takes the raw image as the body and returns the optimized image with `X-Tokens-Before`, `X-Tokens-After`, `X-Input-Size`, `X-Output-Size` and `X-Model` headers, or the report plus a `base64` image with `?response=json`. Query options: `model`, `max_tokens` (default 1600, like the MCP server; `0` disables), `format`, `quality`, `mode`, `crop`. `GET /health` returns `ok`. Bodies over 25 MB get `413`, bad input `400`. There is no authentication. `serve` is in the Cargo CLI and the Docker image, not in the npm package.
+- **`Dockerfile`**: builds the CLI and runs `serve` on `0.0.0.0:8080` as a non-root user. No published image yet; build it with `docker build -t vision-squeezer .`.
+- **`max_tokens` in the Python bindings.** `optimize_image(..., max_tokens=1600)` applies the same token budget as the CLI and MCP server. The default stays `None` (no budget), so existing calls are unchanged.
+- **README: HTTP API section** with n8n HTTP Request node settings. They follow n8n's documentation and are not yet tested inside n8n.
+
+### Changed
+- **Claude token estimates checked against Anthropic's `count_tokens`** (`claude-sonnet-5-5`, image tokens only). On `istanbul.jpg` the estimate is 3 tokens under the real count for Claude Code's downsized copy (3,603) and for the 1600-budget output (1,587), and 85 under for the full 2400×1670 original (4,759). README shows the table. GPT and Gemini estimates are still unchecked.
+- README: manual install sections note that `npx -y vision-squeezer` should be pinned to `@<version>`; Gemini CLI section notes the move to Antigravity CLI.
+
+### Removed
+- `bin/vision-squeezer-mcp` is no longer tracked in git. It was a v0.2.2 leftover that `postinstall.js` overwrites and npm never shipped.
+
 ## [0.8.1] - 2026-10-01
 
 ### Changed
