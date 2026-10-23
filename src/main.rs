@@ -6,6 +6,8 @@ use vision_squeezer::{
     token_savings_table,
 };
 
+mod serve;
+
 const IMAGE_EXTS: &[&str] = &["jpg", "jpeg", "png", "webp", "bmp", "tiff", "tif"];
 
 fn print_usage() {
@@ -15,6 +17,9 @@ fn print_usage() {
     eprintln!("       vision-squeezer stats --csv-output <path>  (write CSV to file)");
     eprintln!("       vision-squeezer /vision-stats  (alias for stats)");
     eprintln!("       vision-squeezer setup-hook    (print shell integration script)");
+    eprintln!(
+        "       vision-squeezer serve [--host H] [--port P]  (HTTP API, default 127.0.0.1:8080)"
+    );
     eprintln!("\nOptions:");
     eprintln!("  --mode ocr|standard|auto  (default: auto)");
     eprintln!("  --format jpeg|webp|avif    (default: jpeg)");
@@ -72,6 +77,11 @@ fn main() {
         } else {
             print_stats();
         }
+        return;
+    }
+
+    if args.get(1).map(|s| s.as_str()) == Some("serve") {
+        serve::run(&args[2..]);
         return;
     }
 

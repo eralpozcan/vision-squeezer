@@ -314,6 +314,46 @@ vision-squeezer ./screenshots --recursive --output-dir ./optimized
 vision-squeezer ./screenshots --recursive --json > report.json
 ```
 
+## HTTP API (n8n, Make, Zapier)
+
+`vision-squeezer serve` runs a small HTTP server, so any workflow tool can squeeze an image between two steps with a plain HTTP request. No custom node is needed.
+
+```bash
+vision-squeezer serve                    # 127.0.0.1:8080
+docker build -t vision-squeezer .        # or run it in a container
+docker run -p 8080:8080 vision-squeezer
+```
+
+Send the image bytes as the body of `POST /optimize`. Options go in the query string:
+
+| Parameter | Default | |
+|---|---|---|
+| `model` | `claude` | Model alias to fit and estimate for (`gpt6`, `gemini`, ...) |
+| `max_tokens` | `1600` | Token budget, `0` disables it |
+| `format` | `jpeg` | `jpeg`, `webp` or `avif` |
+| `quality` | `75` | 1–100 |
+| `mode` | `auto` | `auto`, `ocr` or `standard` |
+| `crop` | `true` | `false` keeps the padding |
+| `response` | `image` | `json` returns the report plus the image as `base64` |
+
+```bash
+curl --data-binary @screenshot.png "http://localhost:8080/optimize?max_tokens=1600" -o out.jpg -D -
+# X-Tokens-Before: 4674
+# X-Tokens-After: 1584
+# X-Input-Size: 2400x1670
+# X-Output-Size: 1344x924
+```
+
+`GET /health` returns `ok`. Bodies over 25 MB get `413`, bad input gets `400` with a one-line reason. There is no authentication: the server listens on `127.0.0.1` by default, and the Docker image listens on all interfaces inside the container, so publish its port only on a network you trust.
+
+**n8n.** Put an **HTTP Request** node between the step that fetches the image and the vision model:
+
+- Method `POST`, URL `http://vision-squeezer:8080/optimize?max_tokens=1600` (the container name when both run on one Docker network, `localhost` otherwise).
+- Send Body on, Body Content Type **n8n Binary File**, Input Data Field Name `data`.
+- Options → Response → Response Format **File**, so the next node gets the optimized image as binary. Turn on Include Response Headers and Status to read the `X-Tokens-*` values.
+
+These settings follow n8n's documentation and have not been tested in n8n itself yet.
+
 ---
 
 <details>
