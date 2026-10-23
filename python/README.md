@@ -24,6 +24,7 @@ report = vs.optimize_image(
     "screenshot.png",
     model="claude",
     quality=75,
+    max_tokens=1600,  # downscale until the estimate fits; omit for no budget
     output_path="screenshot.optimized.jpg",
 )
 print(f"Saved {report['tokens_saved']} tokens, {report['size_reduction_pct']:.1f}% smaller")

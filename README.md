@@ -23,6 +23,10 @@ Fit images to a vision-LLM token budget **before** they reach the model. A libra
 
 The MCP server runs in any MCP client (Claude Code, Cursor, Codex, Gemini CLI, and others), but it only sees images the agent passes to it.
 
+<p align="center">
+  <a href="https://mcprush.com/to/vision-squeezer-mcp?ref=badge"><img src="https://mcprush.com/badge/vision-squeezer-mcp/card.svg" alt="Vision Squeezer MCP server"></a>
+</p>
+
 ---
 
 ## Install
@@ -50,6 +54,8 @@ Every client has exactly one install path, and the installer picks it:
 JSON files are merged, never replaced: other servers and hooks are kept, a file that cannot be parsed is left untouched, and re-running replaces our own entry instead of adding a second.
 
 The scope (`user`, `local`, `project`) is asked only when the client supports more than one. `--method` from older versions is accepted and ignored.
+
+The manual commands below use `npx -y vision-squeezer` for brevity. Pin it as `vision-squeezer@<version>` (the installer does this for you): an unpinned `npx` keeps serving whatever version it cached first, even after a new release.
 
 ### Claude Code
 
@@ -157,6 +163,8 @@ Or add to `~/.codeium/windsurf/mcp_config.json`:
 ```
 
 ### Gemini CLI
+
+> Google replaced Gemini CLI with Antigravity CLI for free and Google One users on 2026-06-18. On Antigravity, see [Antigravity](#antigravity).
 
 ```bash
 gemini mcp add --scope user vision-squeezer -- npx -y vision-squeezer
@@ -502,7 +510,17 @@ The optimization only helps if the **smaller image is what reaches the model**. 
 | You paste or drag an image into the chat | **No.** The client attaches it before any tool or hook runs |
 | You attach a file with `@path` | **No.** No tool call happens, so no hook fires |
 
-**The baseline matters.** Claude Code already downsizes large images before it sends them: in our test a 2400×1670 file reached the model as 1999×1392. Against that, the 1600-token budget saves about 56% on `istanbul.jpg` (about 3,600 → 1,584 estimated tokens), not the 66% measured against the original file. All token counts here are estimates from each provider's published rules, not billed usage.
+**The baseline matters.** Claude Code already downsizes large images before it sends them: in our test a 2400×1670 file reached the model as 1999×1392. Against that, the 1600-token budget saves about 56% on `istanbul.jpg`, not the 66% measured against the original file.
+
+Token counts in this README are estimates from each provider's published rules. For Claude we checked them against Anthropic's `count_tokens` endpoint (`claude-sonnet-5-5`, image tokens only):
+
+| `istanbul.jpg` as sent | Size | Estimate | Real |
+|---|---|---|---|
+| Original | 2400×1670 | 4,674 | 4,759 |
+| Claude Code's downsized copy | 1999×1391 | 3,600 | 3,603 |
+| `--max-tokens 1600` | 1344×924 | 1,584 | 1,587 |
+
+The real saving is 3,603 → 1,587 (−56%) against what Claude Code sends, and 4,759 → 1,587 (−67%) against the original. GPT and Gemini estimates have not been checked against their APIs.
 
 | Client | Image-read hook | Status |
 |---|---|---|
@@ -530,6 +548,7 @@ Save screenshots into the project (for example `screenshots/`) and reference the
 | `bg_tolerance` | u8 0–255 | 15 | Max channel delta for background detection |
 | `output_format` | jpeg/webp | jpeg | Output encoding. WebP is ~30-50% smaller |
 | `max_tiles` | u32 | — | Hard cap on tile count (progressive downscale) |
+| `max_tokens` | u32 | — | Token budget, estimated with `target_model` (Claude when unset); downscales until it fits, `0` disables |
 | `target_model` | string | — | Model-aware profile; use `gpt6` for current OpenAI models |
 
 ## Supported Models

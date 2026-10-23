@@ -35,6 +35,7 @@ fn build_cfg(
     fmt: vs::OutputFormat,
     model: Option<vs::VisionModel>,
     max_tiles: Option<u32>,
+    max_tokens: Option<u32>,
     smart_crop: bool,
 ) -> vs::ProcessConfig {
     let mut b = vs::ProcessConfig::builder()
@@ -49,6 +50,9 @@ fn build_cfg(
     }
     if let Some(t) = max_tiles {
         b = b.max_tiles(t);
+    }
+    if let Some(t) = max_tokens {
+        b = b.max_tokens(t);
     }
     b.build()
 }
@@ -75,7 +79,7 @@ fn load_input(input: &Bound<'_, PyAny>) -> PyResult<(image::DynamicImage, u64)> 
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (input, model=None, mode="auto", format="jpeg", quality=75, tile_size=512, crop=true, bg_tolerance=15, max_tiles=None, output_path=None, smart_crop=false, auto_quality=None))]
+#[pyo3(signature = (input, model=None, mode="auto", format="jpeg", quality=75, tile_size=512, crop=true, bg_tolerance=15, max_tiles=None, output_path=None, smart_crop=false, auto_quality=None, max_tokens=None))]
 fn optimize_image<'py>(
     py: Python<'py>,
     input: &Bound<'py, PyAny>,
@@ -90,6 +94,7 @@ fn optimize_image<'py>(
     output_path: Option<&str>,
     smart_crop: bool,
     auto_quality: Option<f64>,
+    max_tokens: Option<u32>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let (img, input_bytes) = load_input(input)?;
     let (orig_w, orig_h) = (img.width(), img.height());
@@ -104,6 +109,7 @@ fn optimize_image<'py>(
         fmt,
         model_enum,
         max_tiles,
+        max_tokens,
         smart_crop,
     );
     let pmode = parse_mode(Some(mode));

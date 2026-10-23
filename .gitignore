@@ -19,3 +19,6 @@ __pycache__/
 *.pyd
 *.dylib
 .pnpm-store/
+# Downloaded by postinstall.js, never committed
+/bin/vision-squeezer-mcp
+/bin/vision-squeezer-mcp.exe
